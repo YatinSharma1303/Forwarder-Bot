@@ -104,7 +104,29 @@ class SafetyConfig:
     phone_number: str = ""
     bot_token: str = ""
     admin_id: int = 0
-    database_path: str = "forwarder_bot.db"
+    
+    # Database path - use persistent storage on Railway!
+    @property
+    def database_path(self) -> str:
+        """Get database path with Railway persistence support."""
+        # Check for env var override first
+        env_path = os.getenv('DATABASE_PATH')
+        if env_path and env_path.strip():
+            return env_path
+        
+        # Railway provides /data volume for persistence
+        railway_data_dir = '/data'
+        
+        # Check if running on Railway with persistent volume
+        if os.path.exists(railway_data_dir) or os.getenv('RAILWAY_ENVIRONMENT'):
+            db_path = f'{railway_data_dir}/forwarder_bot.db'
+            logger.info(f"📦 Using persistent database: {db_path}")
+            return db_path
+        
+        # Fallback to local path (development)
+        logger.info("📦 Using local database: forwarder_bot.db")
+        return "forwarder_bot.db"
+    
     session_path: str = "session.session"
     log_level: str = "INFO"
     
@@ -199,8 +221,8 @@ class SafetyConfig:
             phone_number=os.getenv('PHONE_NUMBER', config.phone_number),
             bot_token=os.getenv('BOT_TOKEN', config.bot_token),
             admin_id=int(os.getenv('ADMIN_ID', config.admin_id)),
-            database_path=os.getenv('DATABASE_PATH', config.database_path),
-            session_path=os.getenv('SESSION_PATH', config.session_path),
+            # database_path is now a property that handles persistence automatically
+            # session_path=os.getenv('SESSION_PATH', config.session_path),
             log_level=os.getenv('LOG_LEVEL', config.log_level),
             
             # Safety settings
@@ -361,6 +383,18 @@ class Database:
         return conn
     
     def _init_db(self):
+        """Initialize database tables."""
+        logger.info(f"📂 Initializing database at: {self.db_path}")
+        
+        # Ensure directory exists
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir and not os.path.exists(db_dir):
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                logger.info(f"📁 Created database directory: {db_dir}")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not create directory {db_dir}: {e}")
+        
         conn = self._get_conn()
         cursor = conn.cursor()
         
@@ -491,7 +525,9 @@ class Database:
             cursor = conn.cursor()
             query = 'SELECT * FROM sources' + (' WHERE is_active=1' if active_only else '') + ' ORDER BY channel_title'
             cursor.execute(query)
-            return [dict(r) for r in cursor.fetchall()]
+            results = [dict(r) for r in cursor.fetchall()]
+            logger.info(f"📋 Retrieved {len(results)} sources (active_only={active_only})")
+            return results
         finally:
             conn.close()
     
@@ -513,9 +549,10 @@ class Database:
             cursor.execute('''INSERT OR REPLACE INTO destinations (chat_id, chat_title, chat_type, is_active)
                 VALUES (?, ?, ?, 1)''', (chat_id, title, chat_type))
             conn.commit()
+            logger.info(f"📥 Destination added: {title} (ID: {chat_id})")
             return True
         except Exception as e:
-            logger.error(f"❌ Error adding dest: {e}")
+            logger.error(f"❌ Error adding destination: {e}")
             return False
         finally:
             conn.close()
