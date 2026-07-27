@@ -117,8 +117,21 @@ class SafetyConfig:
         # Railway provides /data volume for persistence
         railway_data_dir = '/data'
         
-        # Check if running on Railway with persistent volume
-        if os.path.exists(railway_data_dir) or os.getenv('RAILWAY_ENVIRONMENT'):
+        # Check if running on Railway
+        if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_VOLUME_PATH'):
+            db_path = f'{railway_data_dir}/forwarder_bot.db'
+            logger.info(f"📦 Using persistent database: {db_path}")
+            return db_path
+        
+        # Try to create /data directory anyway (for when volume exists but env var missing)
+        if not os.path.exists(railway_data_dir):
+            try:
+                os.makedirs(railway_data_dir, exist_ok=True)
+                logger.info(f"📁 Created {railway_data_dir} directory")
+            except:
+                pass
+        
+        if os.path.exists(railway_data_dir):
             db_path = f'{railway_data_dir}/forwarder_bot.db'
             logger.info(f"📦 Using persistent database: {db_path}")
             return db_path
@@ -1715,28 +1728,101 @@ async def cmd_add_source(update: Update, context: CallbackContext):
 
 
 async def cmd_add_source_private(update: Update, context: CallbackContext):
+    logger.info(f"=== /addsource_private command received ===")
+    logger.info(f"User: {update.effective_user.id}")
+    logger.info(f"context.args: {context.args}")
+    
     if not _is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Not authorized."); return
     
     if not context.args:
-        await update.message.reply_text("❌ Usage: `/addsource_private <invite_link>`", parse_mode=TGParseMode.MARKDOWN); return
+        await update.message.reply_text(
+            "❌ **Usage:**\n\n`/addsource_private <invite_link>`\n\n"
+            "Example:\n`/addsource_private https://t.me/+abc123def456`\n\n"
+            "Get invite link from channel → Admin → Invite Link",
+            parse_mode=TGParseMode.MARKDOWN
+        ); return
     
     link = context.args[0]
-    if not link.startswith('http'): link = f"https://t.me/{link}"
+    if not link.startswith('http'): 
+        link = f"https://t.me/{link}"
     
-    await update.message.reply_text("🔍 Accessing...", parse_mode=TGParseMode.MARKDOWN)
+    logger.info(f"🔗 Processing private link: {link}")
+    await update.message.reply_text("🔍 Accessing private channel...", parse_mode=TGParseMode.MARKDOWN)
     
     try:
-        entity = await telethon_manager.get_entity(link)
+        # Method 1: Try to get entity directly (works if already joined)
+        entity = None
+        try:
+            entity = await telethon_manager.get_entity(link)
+            logger.info(f"✅ Got entity from link: {entity}")
+        except Exception as e1:
+            logger.warning(f"⚠️ Could not get entity directly: {e1}")
+            
+            # Method 2: Try to join the channel via invite link first
+            try:
+                logger.info("🔄 Trying to join via invite link...")
+                # Import here to avoid circular issues
+                from telethon.tl.functions.channels import JoinChannelRequest
+                
+                # For invite links, use the link as-is
+                joined = await telethon_manager.client(JoinChannelRequest(link))
+                logger.info(f"✅ Joined channel: {joined}")
+                
+                # Now try to get entity again after a short delay
+                import asyncio
+                await asyncio.sleep(2)
+                entity = await telethon_manager.get_entity(link)
+                logger.info(f"✅ Got entity after joining: {entity}")
+            except Exception as e2:
+                logger.error(f"❌ Failed to join/get entity: {e2}")
+                raise e2
+        
         if entity:
             ch_id = entity.id
-            title = getattr(entity, 'title', '') or 'Private'
-            db.add_source(channel_id=ch_id, access_hash=None, title=title, username='', channel_type='channel', is_private=True, invite_link=link)
-            await update.message.reply_text(f"✅ **Private Added!**\n\n**{title}**\nID: `{ch_id}`", parse_mode=TGParseMode.MARKDOWN)
+            acc_hash = getattr(entity, 'access_hash', None)
+            title = getattr(entity, 'title', '') or 'Private Channel'
+            username = getattr(entity, 'username', '') or ''
+            
+            logger.info(f"📥 Adding private source: {title} (ID: {ch_id})")
+            
+            result = db.add_source(
+                channel_id=ch_id, 
+                access_hash=acc_hash, 
+                title=title, 
+                username=username, 
+                channel_type='channel', 
+                is_private=True, 
+                invite_link=link
+            )
+            logger.info(f"✅ db.add_source returned: {result}")
+            
+            # Verify save
+            sources_after = db.get_sources()
+            logger.info(f"📋 Sources after adding: {len(sources_after)} total")
+            
+            await update.message.reply_text(
+                f"✅ **Private Source Added!**\n\n"
+                f"**{title}**\n"
+                f"ID: `{ch_id}`\n"
+                f"Link: `{link[:50]}...`\n\n"
+                f"_Bot must be member of this channel_",
+                parse_mode=TGParseMode.MARKDOWN
+            )
         else:
-            await update.message.reply_text("⚠️ Saved but couldn't resolve yet.", parse_mode=TGParseMode.MARKDOWN)
+            raise Exception("Could not resolve entity from invite link")
+            
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
+        error_msg = str(e)[:300]
+        logger.error(f"❌ Error in /addsource_private: {error_msg}", exc_info=True)
+        await update.message.reply_text(
+            f"❌ **Error:**\n\n`{error_msg}`\n\n"
+            f"💡 **Solutions:**\n\n"
+            f"1. Make sure invite link is valid and not expired\n"
+            f"2. Bot must be added to the channel first\n"
+            f"3. Check bot has permission to view channel",
+            parse_mode=TGParseMode.MARKDOWN
+        )
 
 
 async def cmd_remove_source(update: Update, context: CallbackContext):
