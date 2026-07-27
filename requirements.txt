@@ -2,8 +2,8 @@
 telethon==1.34.0
 python-telegram-bot==21.0.1
 python-dotenv==1.0.0
-aiohttp==3.9.5
-cryptography==42.0.4
+aiohttp>=3.9.5,<4.0.0
+cryptography>=42.0.0
 
-# For deployment
-gunicorn==22.0.0
+# For deployment (Linux only)
+gunicorn>=22.0.0; sys_platform != "win32"
