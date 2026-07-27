@@ -42,7 +42,7 @@ Before you start, make sure you have:
 cd ~
 
 # Clone the repository
-git clone https://github.com/YatinSharma1303/Forwarder-Bot.git
+git clone https://github.com/YOUR_USERNAME/Forwarder-Bot.git
 
 # Enter the project directory
 cd Forwarder-Bot
@@ -51,7 +51,7 @@ cd Forwarder-Bot
 ### Option B: Clone via SSH (If you have SSH keys set up)
 
 ```bash
-git clone git@github.com:YatinSharma1303/Forwarder-Bot.git
+git clone git@github.com:YOUR_USERNAME/Forwarder-Bot.git
 cd Forwarder-Bot
 ```
 
@@ -259,12 +259,12 @@ You should see:
 
 5. **Enter a unique username** ending with `bot`:
    ```
-   YatinForwarderBot
+   MyForwarderBot
    ```
    
    > ⚠️ If the username is taken, try adding numbers or underscores:
-   > - `YatinForwarderBot2024`
-   > - `Yatin_Forwarder_Bot`
+   > - `MyForwarderBot2024`
+   > - `My_Forwarder_Bot`
    > - `MyForwarderBot_xyz`
 
 #### Step 3.3: Get Your Token
@@ -274,7 +274,7 @@ If successful, BotFather responds with:
 Done! Congratulations on your new bot.
 
 Name: My Forwarder Bot
-Username: @YatinForwarderBot
+Username: @MyForwarderBot
 
 Token: 7123456789:AAH1234567890abcdefghijklmnop
          ↑ THIS IS YOUR BOT_TOKEN ↑
@@ -296,7 +296,7 @@ BOT_TOKEN = 7123456789:AAH1234567890abcdefghijklmnop
 To make your bot look professional, set up commands:
 
 1. Send `/setcommands` to @BotFather
-2. Select your bot (`@YatinForwarderBot`)
+2. Select your bot (`@YourBotName`)
 3. Paste this list:
 
 ```
@@ -349,7 +349,7 @@ The bot will respond instantly:
 ┌─────────────────────────────────────┐
 │  Id: 987654321          ← THIS IS  │
 │                        YOUR ADMIN_ID│
-│  First Name: Yatin                   │
+│  First Name: YourName                │
 │                                     │
 │  ...                                │
 └─────────────────────────────────────┘
@@ -606,7 +606,7 @@ Railway provides free tier hosting perfect for running your bot 24/7.
 1. After logging in, click **"+ New Project"** or **"New"** button
 2. Select **"Deploy from GitHub repo"**
 3. Authorize Railway to access your GitHub (if prompted)
-4. Search for: `Forwarder-Bot` or `YatinSharma1303/Forwarder-Bot`
+4. Search for: `Forwarder-Bot` or `YOUR_USERNAME/Forwarder-Bot`
 5. Click the repository name
 6. Click **"Deploy Now"** or **"Add Service"**
 
@@ -697,7 +697,7 @@ Check the **Logs** tab in Railway:
 2024-01-15 10:30:00 INFO Starting Telegram Forwarder Bot...
 2024-01-15 10:30:01 INFO Loading safety preset: balanced
 2024-01-15 10:30:02 INFO Connecting to Telegram...
-2024-01-15 10:30:03 INFO Bot @YatinForwarderBot is online!
+2024-01-15 10:30:03 INFO Bot @YourBotUsername is online!
 2024-01-15 10:30:03 INFO Admin ID: 987654321
 2024-01-15 10:30:04 INFO ✅ Bot is ready to receive commands!
 ```
@@ -931,7 +931,7 @@ Or use `/settings` command in bot to change dynamically.
 | BotFather | t.me/BotFather |
 | User Info Bot | t.me/userinfobot |
 | Railway Dashboard | https://railway.app/dashboard |
-| Repository | https://github.com/YatinSharma1303/Forwarder-Bot |
+| Repository | https://github.com/YOUR_USERNAME/Forwarder-Bot |
 
 ---
 
