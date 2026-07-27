@@ -2054,23 +2054,32 @@ async def cmd_set_link(update: Update, context: CallbackContext):
 # MAIN APPLICATION
 # ==========================================
 
+# Global flag for health check
+bot_ready = False
+
 async def post_init(app: Application):
+    global bot_ready
     logger.info("🚀 Initializing...")
     ok = await telethon_manager.initialize()
     if not ok:
         logger.error("❌ Telethon failed!"); return
     await safe_engine.start(app.bot)
+    bot_ready = True
     logger.info("✅ Ready!")
 
 
 async def post_shutdown(app: Application):
+    global bot_ready
     logger.info("🛑 Shutting down...")
+    bot_ready = False
     await safe_engine.stop()
     await telethon_manager.disconnect()
     logger.info("👋 Done.")
 
 
 def main():
+    global bot_ready
+    
     errors = config.validate()
     if errors:
         print("\n❌ Config Errors:")
@@ -2080,6 +2089,7 @@ def main():
     
     app = Application.builder().token(config.bot_token).post_init(post_init).post_shutdown(post_shutdown).build()
     
+    # Register all command handlers
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("status", cmd_status))
@@ -2120,7 +2130,64 @@ def main():
     print(f"   • Break Every: {config.break_interval_messages} msgs")
     print("="*60 + "\n")
     
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    # Start HTTP health check server for Railway
+    from aiohttp import web as aiohttp_web
+    
+    async def health_check(request):
+        if bot_ready and telethon_manager.is_authorized:
+            return aiohttp_web.json_response({
+                "status": "ok",
+                "bot": "online",
+                "telethon": "connected",
+                "engine": safe_engine.status.value if safe_engine else "unknown"
+            })
+        else:
+            return aiohttp_web.json_response(
+                {"status": "not_ready"}, 
+                status=503
+            )
+    
+    async def start_http_server():
+        http_app = aiohttp_web.Application()
+        http_app.router.add_get('/health', health_check)
+        http_app.router.add_get('/', health_check)  # Root also works
+        
+        runner = aiohttp_web.AppRunner(http_app)
+        await runner.setup()
+        
+        port = int(os.getenv('PORT', 8080))
+        site = aiohttp_web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        logger.info(f"🌐 Health check server running on port {port}")
+    
+    # Start both HTTP server and Telegram polling
+    import asyncio
+    
+    async def run_all():
+        # Start HTTP server first
+        await start_http_server()
+        
+        # Then initialize and run the bot
+        await app.initialize()
+        await post_init(app)
+        await app.start()
+        
+        # Keep running
+        logger.info("✅ Bot is running with health endpoint!")
+        
+        # Wait forever
+        try:
+            while True:
+                await asyncio.sleep(3600)  # Check every hour
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        finally:
+            await app.stop()
+            await app.shutdown()
+            await post_shutdown(app)
+    
+    # Run everything
+    asyncio.run(run_all())
 
 
 if __name__ == '__main__':
