@@ -1020,6 +1020,16 @@ async def notify_admin(text: str, parse_mode=None):
     pass
 
 
+# Operation Status Enum
+class OperationStatus(Enum):
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPED = "stopped"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
 # ==========================================
 # BULK FORWARDING ENGINE (Safe Edition)
 # ==========================================
@@ -1365,16 +1375,6 @@ async def send_admin_msg(text: str, parse_mode=None):
             await safe_engine.bot.send_message(chat_id=config.admin_id, text=text, parse_mode=parse_mode)
         except Exception as e:
             logger.error(f"Admin msg failed: {e}")
-
-
-# Operation Status Enum
-class OperationStatus(Enum):
-    IDLE = "idle"
-    RUNNING = "running"
-    PAUSED = "paused"
-    STOPPED = "stopped"
-    COMPLETED = "completed"
-    ERROR = "error"
 
 
 # ==========================================
