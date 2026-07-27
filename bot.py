@@ -1651,6 +1651,11 @@ Day: {s['msgs_today']:,}/{s['daily_limit']:,} ({s['daily_pct']:.0f}%)
 
 # Source commands
 async def cmd_add_source(update: Update, context: CallbackContext):
+    logger.info(f"=== /addsource command received ===")
+    logger.info(f"User: {update.effective_user.id}")
+    logger.info(f"context.args: {context.args}")
+    logger.info(f"Database path: {db.db_path}")
+    
     if not _is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Not authorized."); return
     
@@ -1674,7 +1679,16 @@ async def cmd_add_source(update: Update, context: CallbackContext):
         username = getattr(entity, 'username', '') or ''
         is_private = not bool(username)
         
-        db.add_source(channel_id=ch_id, access_hash=acc_hash, title=title, username=username, channel_type='channel', is_private=is_private)
+        logger.info(f"📥 Adding source: {title} (ID: {ch_id}, Private: {is_private})")
+        
+        result = db.add_source(channel_id=ch_id, access_hash=acc_hash, title=title, username=username, channel_type='channel', is_private=is_private)
+        logger.info(f"✅ db.add_source returned: {result}")
+        
+        # Verify it was saved
+        sources_after = db.get_sources()
+        logger.info(f"📋 Sources after adding: {len(sources_after)} total")
+        for s in sources_after:
+            logger.info(f"   - {s.get('channel_title')} (ID: {s.get('channel_id')})")
         
         total = 0
         try:
@@ -1696,6 +1710,7 @@ async def cmd_add_source(update: Update, context: CallbackContext):
 *Use `/bulk_start {ch_id} <dest_id>` to start*""", parse_mode=TGParseMode.MARKDOWN
         )
     except Exception as e:
+        logger.error(f"❌ Error in /addsource: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
 
 
@@ -1746,10 +1761,16 @@ async def cmd_remove_source(update: Update, context: CallbackContext):
 
 
 async def cmd_list_sources(update: Update, context: CallbackContext):
+    logger.info(f"=== /sources command received ===")
+    logger.info(f"User: {update.effective_user.id}")
+    logger.info(f"Database path: {db.db_path}")
+    
     if not _is_admin(update.effective_user.id):
         await update.message.reply_text("❌ Not authorized."); return
     
     sources = db.get_sources()
+    logger.info(f"📋 db.get_sources() returned: {len(sources)} sources")
+    
     if not sources:
         await update.message.reply_text("📭 No sources. Use `/addsource`", parse_mode=TGParseMode.MARKDOWN); return
     
