@@ -24,6 +24,9 @@ import sqlite3
 import time
 import random
 import json
+import base64
+import zipfile
+import io
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, AsyncGenerator, Tuple
 from dataclasses import dataclass, field
@@ -685,6 +688,74 @@ db = Database(config.database_path)
 
 
 # ==========================================
+# SESSION DECODER (for Railway deployment)
+# ==========================================
+
+def decode_session_from_env(session_path: str) -> bool:
+    """
+    Decode session from environment variable (base64 or compressed base64).
+    Returns True if session was decoded successfully.
+    """
+    # Check if session file already exists
+    if os.path.exists(session_path):
+        size = os.path.getsize(session_path)
+        if size > 100:  # Valid session file should be > 100 bytes
+            logger.info(f"✅ Session file exists ({size} bytes)")
+            return True
+    
+    # Try SESSION_B64_ZIP (compressed)
+    session_b64_zip = os.getenv('SESSION_B64_ZIP', '')
+    is_compressed = os.getenv('SESSION_COMPRESSED', 'false').lower() == 'true'
+    
+    # Try SESSION_B64 (uncompressed)
+    session_b64 = os.getenv('SESSION_B64', '')
+    
+    try:
+        if session_b64_zip and is_compressed:
+            logger.info("📦 Decoding compressed session (SESSION_B64_ZIP)...")
+            # Decode base64
+            zip_data = base64.b64decode(session_b64_zip)
+            # Decompress zip
+            with zipfile.ZipFile(io.BytesIO(zip_data), 'r') as zf:
+                # Find session file in zip
+                for name in zf.namelist():
+                    if 'session' in name.lower():
+                        session_data = zf.read(name)
+                        break
+                else:
+                    # Take the first file
+                    name = zf.namelist()[0]
+                    session_data = zf.read(name)
+            
+            # Write session file
+            with open(session_path, 'wb') as f:
+                f.write(session_data)
+            
+            logger.info(f"✅ Session decompressed and saved ({len(session_data)} bytes)")
+            return True
+            
+        elif session_b64:
+            logger.info("🔐 Decoding session (SESSION_B64)...")
+            # Decode base64 directly
+            session_data = base64.b64decode(session_b64)
+            
+            # Write session file
+            with open(session_path, 'wb') as f:
+                f.write(session_data)
+            
+            logger.info(f"✅ Session decoded and saved ({len(session_data)} bytes)")
+            return True
+            
+        else:
+            logger.warning("⚠️ No SESSION_B64 or SESSION_B64_ZIP found in environment")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to decode session: {e}")
+        return False
+
+
+# ==========================================
 # TELETHON CLIENT
 # ==========================================
 
@@ -705,6 +776,13 @@ class TelethonManager:
             return False
         
         try:
+            # Decode session from environment variable (for Railway deployment)
+            logger.info("🔍 Checking for session file...")
+            if not decode_session_from_env(config.session_path):
+                logger.error("❌ No valid session found!")
+                logger.error("   Add SESSION_B64 or SESSION_B64_ZIP to environment variables")
+                return False
+            
             self.client = TelegramClient(config.session_path, config.api_id, config.api_hash)
             await self.client.connect()
             self.is_connected = True
