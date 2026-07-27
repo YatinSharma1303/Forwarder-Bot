@@ -113,13 +113,13 @@ class SafetyConfig:
         # 1. Check explicit environment variable (MOST RELIABLE - USER SHOULD SET THIS!)
         env_path = os.getenv('DATABASE_PATH')
         if env_path and env_path.strip():
-            logger.info(f"✅ Using DATABASE_PATH env var: {env_path}")
+            print(f"✅ Using DATABASE_PATH env var: {env_path}")
             return env_path.strip()
         
         # 2. Check /data (standard volume mount)
         if os.path.exists('/data') and os.access('/data', os.W_OK):
             db_path = '/data/forwarder_bot.db'
-            logger.info(f"✅ Using /data volume: {db_path}")
+            print(f"✅ Using /data volume: {db_path}")
             return db_path
         
         # 3. Check Railway's SPECIFIC mount path pattern (from logs)
@@ -129,16 +129,16 @@ class SafetyConfig:
             # Pattern: /var/lib/containers/railwayapp/*/bind-mounts/*/
             bind_mount_pattern = f'{railway_base}/*/bind-mounts/*/'
             matches = glob.glob(bind_mount_pattern)
-            logger.debug(f"🔍 Railway bind-mount search found: {len(matches)} paths")
+            print(f"🔍 Railway bind-mount search found: {len(matches)} paths")
             
             for match in matches:
                 try:
                     if os.access(match, os.W_OK):
                         db_path = f'{match}forwarder_bot.db'
-                        logger.info(f"✅ Using Railway volume: {db_path}")
+                        print(f"✅ Using Railway volume: {db_path}")
                         return db_path
                 except Exception as e:
-                    logger.debug(f"Path not writable: {match} - {e}")
+                    print(f"Path not writable: {match} - {e}")
             
             # If we found Railway base but no writable bind-mount, try direct subdirs
             all_dirs = glob.glob(f'{railway_base}/**/', recursive=True)
@@ -146,7 +146,7 @@ class SafetyConfig:
                 try:
                     if os.access(match, os.W_OK) and 'vol_' in match:
                         db_path = f'{match}forwarder_bot.db'
-                        logger.info(f"✅ Using Railway vol_ path: {db_path}")
+                        print(f"✅ Using Railway vol_ path: {db_path}")
                         return db_path
                 except:
                     continue
@@ -156,12 +156,12 @@ class SafetyConfig:
         for base in other_paths:
             if os.path.exists(base) and os.access(base, os.W_OK):
                 db_path = f'{base}/forwarder_bot.db'
-                logger.info(f"✅ Using alternative volume: {db_path}")
+                print(f"✅ Using alternative volume: {db_path}")
                 return db_path
         
         # 5. Fallback to local (development only - DATA WILL BE LOST ON REDEPLOY!)
-        logger.warning("⚠️ NO VOLUME DETECTED! Using local database - DATA WILL NOT PERSIST!")
-        logger.warning("⚠️ Set DATABASE_PATH env var to your Railway volume path!")
+        print("⚠️ NO VOLUME DETECTED! Using local database - DATA WILL NOT PERSIST!")
+        print("⚠️ Set DATABASE_PATH env var to your Railway volume path!")
         return "forwarder_bot.db"
     
     session_path: str = "session.session"
@@ -1186,9 +1186,8 @@ safety_engine = SafetyEngine()
 
 
 async def notify_admin(text: str, parse_mode=None):
-    """Helper to notify admin (will be set after bot init)."""
-    # This will be properly connected in main()
-    pass
+    """Helper to notify admin."""
+    await send_admin_msg(text, parse_mode=parse_mode)
 
 
 # Operation Status Enum
@@ -1253,13 +1252,14 @@ class SafeBulkEngine:
             if not entity:
                 raise Exception(f"Cannot access source {src_id}")
             
-            # Count messages
+            # Count messages - FIXED: get_messages returns a list!
             total = 0
             try:
                 msgs = await telethon_manager.client.get_messages(entity, limit=1)
-                total = msgs.total if hasattr(msgs, 'total') else 0
-            except:
-                pass
+                if msgs and len(msgs) > 0:
+                    total = msgs[0].id if hasattr(msgs[0], 'id') else 0
+            except Exception as count_err:
+                logger.warning(f"Could not count messages: {count_err}")
             
             db.create_bulk_operation(op_id, src_id, dest_id, total, json.dumps({
                 'preset': config.safety_preset,
@@ -1606,6 +1606,10 @@ async def cmd_help(update: Update, context: CallbackContext):
 • `/bulk_resume` - Resume
 • `/bulk_stop` - Stop
 
+**🧪 TESTING**
+• `/test_forward <src> <dest> [count]` - Test with small batch
+• Default: 5 messages | Max: 100
+
 **🛡️ SAFETY**
 • `/safety_status` - Detailed safety metrics
 • `/status` - Overview
@@ -1614,7 +1618,13 @@ async def cmd_help(update: Update, context: CallbackContext):
 1. Use `conservative` preset for maximum safety
 2. Let it run 24/7 with sleep schedule ON
 3. Monitor with `/safety_status`
-4. Don't worry about crashes - auto-resumes!""", parse_mode=TGParseMode.MARKDOWN)
+4. Don't worry about crashes - auto-resumes!
+
+**⚠️ FIRST TIME?**
+1. `/addsource <channel>` - Add source
+2. `/adddest <destination>` - Add destination
+3. `/test_forward <src> <dest> 5` - TEST first!
+4. `/bulk_start <src> <dest>` - GO LIVE!""", parse_mode=TGParseMode.MARKDOWN)
 
 
 async def cmd_safety_status(update: Update, context: CallbackContext):
@@ -2049,9 +2059,9 @@ async def cmd_add_destination(update: Update, context: CallbackContext):
         if reply_msg and reply_forward:
             try:
                 chat = reply_forward
-                chat_id = chat.id
-                chat_title = chat.title or 'Unknown Channel'
-                chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
+                chat_id = reply_forward.id  # FIXED: Use correct variable
+                chat_title = reply_forward.title or 'Unknown Channel'
+                chat_type = str(reply_forward.type) if hasattr(reply_forward.type, '__str__') else 'channel'
                 
                 db.add_destination(chat_id, chat_title, chat_type)
                 
@@ -2376,6 +2386,149 @@ async def cmd_set_link(update: Update, context: CallbackContext):
         await update.message.reply_text("❌ Invalid ID.", parse_mode=TGParseMode.MARKDOWN)
 
 
+# TEST COMMAND - For testing small batches
+async def cmd_test_forward(update: Update, context: CallbackContext):
+    """Test forwarding with a small number of messages."""
+    if not _is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Not authorized."); return
+    
+    if len(context.args) < 2:
+        sources = db.get_sources()
+        dests = db.get_destinations()
+        
+        help_text = "🧪 **TEST FORWARD**\n\n"
+        help_text += "Usage: `/test_forward <source_id> <dest_id> [count]`\n\n"
+        help_text += "**Sources:**\n"
+        if sources:
+            for s in sources[:5]:
+                help_text += f"• `{s['channel_id']}` - {s['channel_title']}\n"
+        help_text += "\n**Destinations:**\n"
+        if dests:
+            for d in dests[:5]:
+                help_text += f"• `{d['chat_id']}` - {d['chat_title']}\n"
+        help_text += "\n**Example:**\n"
+        help_text += "`/test_forward -100123 -100456 10`\n"
+        help_text += "(Forwards only 10 messages, then stops)\n\n"
+        help_text += "⚠️ Default count is 5 if not specified"
+        
+        await update.message.reply_text(help_text, parse_mode=TGParseMode.MARKDOWN)
+        return
+    
+    try:
+        src_id = int(context.args[0])
+        dest_id = int(context.args[1])
+        count = int(context.args[2]) if len(context.args) > 2 else 5
+        
+        # Validate count (max 100 for test)
+        if count > 100:
+            await update.message.reply_text("⚠️ Max 100 messages for test. Use `/bulk_start` for more.")
+            return
+        if count < 1:
+            await update.message.reply_text("⚠️ Count must be at least 1")
+            return
+        
+        # Verify source and destination exist
+        src_info = db.get_source(src_id)
+        if not src_info:
+            await update.message.reply_text(f"❌ Source `{src_id}` not found. Use `/sources`")
+            return
+        
+        dests = db.get_destinations()
+        dest_info = next((d for d in dests if d['chat_id'] == dest_id), None)
+        if not dest_info:
+            await update.message.reply_text(f"❌ Destination `{dest_id}` not found. Use `/dests`")
+            return
+        
+        # Check if already running
+        if safe_engine.status == OperationStatus.RUNNING:
+            await update.message.reply_text("⚠️ Already running! Stop first with `/bulk_stop`")
+            return
+        
+        await update.message.reply_text(
+            f"🧪 **STARTING TEST...**\n\n"
+            f"From: {src_info['channel_title']}\n"
+            f"To: {dest_info['chat_title']}\n"
+            f"Count: {count} messages\n\n"
+            f"⏳ Forwarding {count} messages...",
+            parse_mode=TGParseMode.MARKDOWN
+        )
+        
+        # Run test in background
+        asyncio.create_task(_run_test_forward(src_id, dest_id, src_info, dest_info, count))
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid arguments. Usage: `/test_forward <src> <dest> [count]`", parse_mode=TGParseMode.MARKDOWN)
+    except Exception as e:
+        logger.error(f"Test forward error: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
+
+
+async def _run_test_forward(src_id: int, dest_id: int, src_info: dict, dest_info: dict, count: int):
+    """Execute test forward in background."""
+    try:
+        entity = await telethon_manager.get_entity(src_id)
+        if not entity:
+            await send_admin_msg("❌ Cannot access source channel", parse_mode=TGParseMode.MARKDOWN)
+            return
+        
+        success_count = 0
+        fail_count = 0
+        msg_num = 0
+        
+        async for message in telethon_manager.iter_messages(entity, reverse=True):
+            if msg_num >= count:
+                break
+            
+            # Skip non-media messages for test (optional - remove to forward all)
+            # if not message.media:
+            #     msg_num += 1
+            #     continue
+            
+            try:
+                # Forward the message
+                result = await safe_engine.bot.forward_message(
+                    chat_id=dest_id,
+                    from_chat_id=entity.id,
+                    message_id=message.id
+                )
+                
+                success_count += 1
+                logger.info(f"✅ Test forwarded msg {message.id} -> {result.message_id}")
+                
+                # Small delay between messages
+                await asyncio.sleep(1.5)
+                
+            except FloodWaitError as e:
+                logger.warning(f"Flood wait: {e.seconds}s")
+                await asyncio.sleep(e.seconds + 1)
+                fail_count += 1
+            except Exception as e:
+                logger.error(f"Failed to forward {message.id}: {e}")
+                fail_count += 1
+            
+            msg_num += 1
+        
+        # Send results
+        await send_admin_msg(
+            f"🧪 **TEST COMPLETE!**\n\n"
+            f"**Source:** {src_info['channel_title']}\n"
+            f"**Dest:** {dest_info['chat_title']}\n\n"
+            f"📊 **Results:**\n"
+            f"• ✅ Success: {success_count}/{count}\n"
+            f"• ❌ Failed: {fail_count}/{count}\n\n"
+            f"💡 Check destination channel for forwarded messages!\n\n"
+            f"*Use `/bulk_start {src_id} {dest_id}` for full transfer*",
+            parse_mode=TGParseMode.MARKDOWN
+        )
+        
+    except Exception as e:
+        logger.error(f"Test forward failed: {e}", exc_info=True)
+        await send_admin_msg(
+            f"❌ **TEST FAILED!**\n\n{str(e)[:300]}",
+            parse_mode=TGParseMode.MARKDOWN
+        )
+
+
 # ==========================================
 # MAIN APPLICATION
 # ==========================================
@@ -2434,6 +2587,7 @@ def main():
     app.add_handler(CommandHandler("bulk_resume", cmd_bulk_resume))
     app.add_handler(CommandHandler("bulk_stop", cmd_bulk_stop))
     app.add_handler(CommandHandler("setlink", cmd_set_link))
+    app.add_handler(CommandHandler("test_forward", cmd_test_forward))
     
     logger.info("="*60)
     logger.info("🤖 FORWARDER BOT - SAFETY EDITION")
