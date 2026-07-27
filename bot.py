@@ -114,27 +114,42 @@ class SafetyConfig:
         if env_path and env_path.strip():
             return env_path
         
-        # Railway provides /data volume for persistence
-        railway_data_dir = '/data'
+        # List of possible volume mount paths (Railway uses various paths)
+        possible_paths = [
+            '/data',  # Standard mount point we requested
+            '/var/lib/containers',  # Railway container path
+            '/app/data',
+            '/tmp/data',
+        ]
         
-        # Check if running on Railway
-        if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_VOLUME_PATH'):
-            db_path = f'{railway_data_dir}/forwarder_bot.db'
-            logger.info(f"📦 Using persistent database: {db_path}")
-            return db_path
+        # Check if running on Railway (check multiple indicators)
+        is_railway = (
+            os.getenv('RAILWAY_ENVIRONMENT') or 
+            os.getenv('RAILWAY_VOLUME_PATH') or
+            os.getenv('RAILWAY_SERVICE_NAME') or
+            any(os.path.exists(p) for p in ['/var/lib/containers', '/data'])
+        )
         
-        # Try to create /data directory anyway (for when volume exists but env var missing)
-        if not os.path.exists(railway_data_dir):
-            try:
-                os.makedirs(railway_data_dir, exist_ok=True)
-                logger.info(f"📁 Created {railway_data_dir} directory")
-            except:
-                pass
-        
-        if os.path.exists(railway_data_dir):
-            db_path = f'{railway_data_dir}/forwarder_bot.db'
-            logger.info(f"📦 Using persistent database: {db_path}")
-            return db_path
+        if is_railway:
+            # Try /data first (user-mounted)
+            if os.path.exists('/data') and os.access('/data', os.W_OK):
+                db_path = '/data/forwarder_bot.db'
+                logger.info(f"📦 Using persistent database (/data): {db_path}")
+                return db_path
+            
+            # Try Railway's automatic mount path
+            railway_mount_base = '/var/lib/containers/railwayapp'
+            if os.path.exists(railway_mount_base):
+                import glob
+                # Find the bind-mounts directory
+                mount_pattern = f'{railway_mount_base}/*/bind-mounts/*/'
+                matches = glob.glob(mount_pattern)
+                if matches:
+                    # Use first available mount point
+                    mount_dir = matches[0]
+                    db_path = f'{mount_dir}forwarder_bot.db'
+                    logger.info(f"📦 Using persistent database (Railway auto): {db_path}")
+                    return db_path
         
         # Fallback to local path (development)
         logger.info("📦 Using local database: forwarder_bot.db")
@@ -505,18 +520,37 @@ class Database:
         conn = self._get_conn()
         try:
             cursor = conn.cursor()
+            
+            # Map kwargs to SQL parameters (fix binding issue)
+            params = {
+                'channel_id': kwargs.get('channel_id'),
+                'access_hash': kwargs.get('access_hash'),
+                'channel_title': kwargs.get('title', ''),
+                'channel_username': kwargs.get('username', ''),
+                'channel_type': kwargs.get('channel_type', 'channel'),
+                'is_private': 1 if kwargs.get('is_private') else 0,
+                'invite_link': kwargs.get('invite_link'),
+                'is_active': 1
+            }
+            
+            logger.info(f"📊 DB Insert params: channel_id={params['channel_id']}, title={params['channel_title']}")
+            
             cursor.execute('''INSERT OR REPLACE INTO sources 
                 (channel_id, access_hash, channel_title, channel_username, 
                  channel_type, is_private, invite_link, is_active)
-                VALUES (:ch_id, :acc_hash, :title, :username, :type, :priv, :link, 1)''', kwargs)
+                VALUES (:channel_id, :access_hash, :channel_title, :channel_username, 
+                        :channel_type, :is_private, :invite_link, :is_active)''', params)
+            
             if kwargs.get('is_private') and kwargs.get('invite_link'):
                 cursor.execute('''INSERT OR REPLACE INTO private_links (channel_id, invite_link)
-                    VALUES (:ch_id, :link)''', {'ch_id': kwargs['channel_id'], 'link': kwargs['invite_link']})
+                    VALUES (:channel_id, :invite_link)''', 
+                    {'channel_id': kwargs['channel_id'], 'invite_link': kwargs['invite_link']})
+            
             conn.commit()
             logger.info(f"📥 Source added: {kwargs.get('channel_title')}")
             return True
         except Exception as e:
-            logger.error(f"❌ Error adding source: {e}")
+            logger.error(f"❌ Error adding source: {e}", exc_info=True)
             return False
         finally:
             conn.close()
