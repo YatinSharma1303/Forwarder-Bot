@@ -45,7 +45,6 @@ from telethon.tl.types import (
 )
 from telethon.errors import (
     FloodWaitError,
-    FloodPremiumWaitError,
     SlowModeWaitError,
     ServerError,
     RpcCallFailError,
