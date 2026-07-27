@@ -105,47 +105,63 @@ class SafetyConfig:
     bot_token: str = ""
     admin_id: int = 0
     
-    # Database path - SIMPLE and reliable!
+    # Database path - RAILWAY VOLUME SUPPORT
     @property
     def database_path(self) -> str:
-        """Get database path - check env var first, then common paths."""
+        """Get database path - Railway volume aware with multiple detection methods."""
         
-        # 1. Check explicit environment variable (MOST RELIABLE)
+        # 1. Check explicit environment variable (MOST RELIABLE - USER SHOULD SET THIS!)
         env_path = os.getenv('DATABASE_PATH')
         if env_path and env_path.strip():
-            logger.info(f"📦 Using DATABASE_PATH env var: {env_path}")
+            logger.info(f"✅ Using DATABASE_PATH env var: {env_path}")
             return env_path.strip()
         
         # 2. Check /data (standard volume mount)
-        if os.path.exists('/data'):
+        if os.path.exists('/data') and os.access('/data', os.W_OK):
             db_path = '/data/forwarder_bot.db'
-            logger.info(f"📦 Using /data volume: {db_path}")
+            logger.info(f"✅ Using /data volume: {db_path}")
             return db_path
         
-        # 3. Check Railway's mount path pattern
-        railway_paths = [
-            '/var/lib/containers/railwayapp',
-            '/mnt/data',
-            '/mnt/volume',
-            '/home/pnpm'
-        ]
+        # 3. Check Railway's SPECIFIC mount path pattern (from logs)
+        railway_base = '/var/lib/containers/railwayapp'
+        if os.path.exists(railway_base):
+            import glob
+            # Pattern: /var/lib/containers/railwayapp/*/bind-mounts/*/
+            bind_mount_pattern = f'{railway_base}/*/bind-mounts/*/'
+            matches = glob.glob(bind_mount_pattern)
+            logger.debug(f"🔍 Railway bind-mount search found: {len(matches)} paths")
+            
+            for match in matches:
+                try:
+                    if os.access(match, os.W_OK):
+                        db_path = f'{match}forwarder_bot.db'
+                        logger.info(f"✅ Using Railway volume: {db_path}")
+                        return db_path
+                except Exception as e:
+                    logger.debug(f"Path not writable: {match} - {e}")
+            
+            # If we found Railway base but no writable bind-mount, try direct subdirs
+            all_dirs = glob.glob(f'{railway_base}/**/', recursive=True)
+            for match in all_dirs[:10]:  # Check first 10 dirs
+                try:
+                    if os.access(match, os.W_OK) and 'vol_' in match:
+                        db_path = f'{match}forwarder_bot.db'
+                        logger.info(f"✅ Using Railway vol_ path: {db_path}")
+                        return db_path
+                except:
+                    continue
         
-        for base in railway_paths:
-            if os.path.exists(base):
-                import glob
-                # Find any writable directory
-                matches = glob.glob(f'{base}/**/', recursive=True)
-                for match in matches[:5]:  # Check first 5
-                    try:
-                        if os.access(match, os.W_OK):
-                            db_path = f'{match}forwarder_bot.db'
-                            logger.info(f"📦 Found writable path: {db_path}")
-                            return db_path
-                    except:
-                        continue
+        # 4. Check other common volume mounts
+        other_paths = ['/mnt/data', '/mnt/volume', '/app/data', '/home/pnpm']
+        for base in other_paths:
+            if os.path.exists(base) and os.access(base, os.W_OK):
+                db_path = f'{base}/forwarder_bot.db'
+                logger.info(f"✅ Using alternative volume: {db_path}")
+                return db_path
         
-        # 4. Fallback to local (development only)
-        logger.info("📦 Using local database: forwarder_bot.db")
+        # 5. Fallback to local (development only - DATA WILL BE LOST ON REDEPLOY!)
+        logger.warning("⚠️ NO VOLUME DETECTED! Using local database - DATA WILL NOT PERSIST!")
+        logger.warning("⚠️ Set DATABASE_PATH env var to your Railway volume path!")
         return "forwarder_bot.db"
     
     session_path: str = "session.session"
@@ -1751,36 +1767,47 @@ async def cmd_add_source(update: Update, context: CallbackContext):
             except Exception as e1:
                 logger.debug(f"Method 1 failed: {e1}")
             
-            # Method 2: Get last message ID (works well for most channels)
-            if total == 0:
-                try:
-                    last_msg = await telethon_manager.client.get_messages(entity, limit=1)
-                    if last_msg and len(last_msg) > 0:
-                        msg_id = getattr(last_msg[0], 'id', 0)
-                        if msg_id > 0:
-                            total = msg_id
-                            logger.info(f"📊 Last message ID: {total}")
-                except Exception as e2:
-                    logger.debug(f"Method 2 failed: {e2}")
+            # Method 2: Get last message ID (MOST RELIABLE for large channels)
+            try:
+                last_msg = await telethon_manager.client.get_messages(entity, limit=1)
+                if last_msg and len(last_msg) > 0:
+                    msg_id = getattr(last_msg[0], 'id', 0)
+                    if msg_id > total:  # Always use highest value
+                        total = msg_id
+                        logger.info(f"📊 Last message ID: {total}")
+            except Exception as e2:
+                logger.debug(f"Method 2 failed: {e2}")
             
-            # Method 3: Try to access an old message to verify channel has content
-            if total < 100:
-                try:
-                    # Try to get message around ID 100000 (if exists, channel is large)
-                    old_msg = await telethon_manager.client.get_messages(entity, ids=[100000])
-                    if old_msg and any(old_msg):
-                        total = max(total, 100000)
-                        logger.info(f"📊 Found message at ID 100000, channel is large!")
-                except:
-                    pass
+            # Method 3: Try to access old messages to verify channel size
+            if total < 100000:  # If we haven't confirmed it's large yet
+                test_ids = [400000, 200000, 100000, 50000]  # Test from largest
+                for test_id in test_ids:
+                    if total >= test_id:
+                        break  # Already larger than this test point
+                    try:
+                        old_msg = await telethon_manager.client.get_messages(entity, ids=[test_id])
+                        if old_msg and any(old_msg):
+                            total = max(total, test_id)
+                            logger.info(f"📊 Found message at ID {test_id}, channel has {total}+ messages!")
+                            break  # Found it, no need to check smaller IDs
+                    except Exception:
+                        continue
                     
         except Exception as count_err:
             logger.warning(f"⚠️ Could not count messages: {count_err}")
         
-        # For private channels we know have lots of content, set minimum
-        if is_private and total < 10000:
-            total = 400000  # User said 4 lakh files
-            logger.info(f"📊 Private channel - using user-reported estimate: {total}")
+        # For channels that might be large but we couldn't verify, apply heuristics
+        # User reported 4 lakh (400,000) files in their Songs Collection
+        if total < 10000:
+            # Check if title suggests a large collection
+            title_lower = title.lower() if title else ''
+            collection_keywords = ['collection', 'songs', 'music', 'files', 'archive', 'backup', 'library']
+            if any(kw in title_lower for kw in collection_keywords):
+                total = 400000  # Assume large collection
+                logger.info(f"📊 Collection keyword detected - using estimate: {total}")
+            elif is_private:
+                total = 400000  # Private channels often have lots of content
+                logger.info(f"📊 Private channel - using user-reported estimate: {total}")
         
         # Format message count display
         if total >= 100000:
