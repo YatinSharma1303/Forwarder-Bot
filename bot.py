@@ -2175,6 +2175,7 @@ def main():
     
     # Start both HTTP server and Telegram polling
     import asyncio
+    from telegram.error import Conflict
     
     async def run_all():
         # Start HTTP server first (for Railway health checks)
@@ -2186,11 +2187,35 @@ def main():
         await app.initialize()
         await post_init(app)
         
-        # Start the updater with polling - THIS IS WHAT WAS MISSING!
-        await app.updater.start_polling(drop_pending_updates=True)
-        await app.start()
+        # Start the updater with polling - with conflict handling
+        max_retries = 5
+        retry_delay = 10  # seconds
         
-        logger.info("✅ Bot is running with polling and health endpoint!")
+        for attempt in range(max_retries):
+            try:
+                await app.updater.start_polling(
+                    drop_pending_updates=True,
+                    allowed_updates=Update.ALL_TYPES
+                )
+                await app.start()
+                logger.info("✅ Bot is running with polling and health endpoint!")
+                break
+            except Conflict as e:
+                logger.warning(f"⚠️ Conflict detected (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    logger.info(f"⏳ Waiting {retry_delay}s for old instance to terminate...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error("❌ Max retries reached. Another bot instance may be running.")
+                    # Try force-start anyway (last resort)
+                    try:
+                        await app.updater.start_polling(drop_pending_updates=True)
+                        await app.start()
+                        logger.info("✅ Bot started (force mode)")
+                    except Exception as final_err:
+                        logger.error(f"❌ Failed to start: {final_err}")
+                        return
         
         # Keep running
         try:
@@ -2199,7 +2224,10 @@ def main():
         except (KeyboardInterrupt, SystemExit):
             pass
         finally:
-            await app.updater.stop()
+            try:
+                await app.updater.stop()
+            except:
+                pass
             await app.stop()
             await app.shutdown()
             await post_shutdown(app)
