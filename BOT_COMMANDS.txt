@@ -1,0 +1,885 @@
+================================================================================
+                    TELEGRAM FORWARDER BOT - SAFETY EDITION
+                           COMPLETE COMMAND REFERENCE
+================================================================================
+
+Welcome! This file contains ALL bot commands, their descriptions, usage examples,
+and how they connect together in the bot ecosystem.
+
+All commands below are COPY-PASTEABLE - just copy and send to your bot!
+
+================================================================================
+                            TABLE OF CONTENTS
+================================================================================
+
+  1. GETTING STARTED (First Steps)
+  2. SOURCE MANAGEMENT (Where to read from)
+  3. DESTINATION MANAGEMENT (Where to forward to)
+  4. BULK OPERATIONS (The main forwarding)
+  5. MONITORING & STATUS (Track progress)
+  6. SAFETY CONTROLS (Protect your account)
+  7. COMMAND FLOW (How commands work together)
+  8. QUICK REFERENCE (All commands at a glance)
+
+================================================================================
+                      1. GETTING STARTED (First Steps)
+================================================================================
+
+These are the first commands you'll use when interacting with the bot.
+They provide information about the bot's status and capabilities.
+
+--------------------------------------------------------------------------------
+COMMAND: /start
+--------------------------------------------------------------------------------
+Description:
+  Initialize your session with the bot. Shows welcome message with current
+  safety configuration and quick-start guide.
+
+When to use:
+  - First time using the bot
+  - Check if bot is online
+  - See current safety preset
+
+What it shows:
+  - Bot name and version (Safety Edition)
+  - Safety features overview
+  - Current preset (Conservative/Balanced/Aggressive)
+  - Quick command list
+
+Example response:
+  "🤖 Telegram Forwarder Bot
+   🛡️ Safety Edition - Account Protection MAXIMIZED
+   
+   Welcome [Your Name]! 👋
+   
+   🛡️ Safety Features:
+   • ✅ Human-like behavior simulation
+   • ⏰ Automatic sleep schedule (11PM-8AM)
+   • 📊 Hourly/Daily message limits
+   • 🎲 Random breaks & pauses
+   • 🐢 Adaptive speed (auto-slow on limits)
+   • 💾 Crash-safe resume capability
+   
+   📋 Commands:
+   /help - Full guide
+   /status - System + safety status
+   /safety_status - Detailed safety metrics
+   /bulk_start <src> <dest> - Start forwarding!
+   
+   ⚙️ Current Preset: BALANCED"
+
+Copy this command:
+/start
+
+--------------------------------------------------------------------------------
+COMMAND: /help
+--------------------------------------------------------------------------------
+Description:
+  Display complete help guide with all available commands organized by category.
+  This is your go-to reference when you forget what command to use.
+
+When to use:
+  - Need to see all available options
+  - Looking for a specific command
+  - Want tips for large operations (400K+ messages)
+
+What it shows:
+  - Source management commands
+  - Destination management commands
+  - Bulk operation commands
+  - Safety monitoring commands
+  - Tips for bulk operations
+
+Example response:
+  "📖 Complete Help
+   
+   📥 SOURCES (Read FROM here)
+   • /addsource @user - Public channel
+   • /addsource <id> - By ID
+   • /addsource_private <link> - Private via link
+   • /sources - List sources
+   • /mysources - Browse your channels
+   
+   📤 DESTINATIONS (Forward TO here)
+   • /adddest @user_or_id - Add destination
+   • /dests - List destinations
+   
+   🚀 BULK OPERATIONS
+   • /bulk_start <src_id> <dest_id> - START!
+   • /bulk_status - Progress
+   • /bulk_pause - Pause
+   • /bulk_resume - Resume
+   • /bulk_stop - Stop
+   
+   🛡️ SAFETY
+   • /safety_status - Detailed safety metrics
+   • /status - Overview
+   
+   💡 TIPS FOR 400K+:
+   1. Use conservative preset for maximum safety
+   2. Let it run 24/7 with sleep schedule ON
+   3. Monitor with /safety_status
+   4. Don't worry about crashes - auto-resumes!"
+
+Copy this command:
+/help
+
+================================================================================
+                   2. SOURCE MANAGEMENT (Where to read from)
+================================================================================
+
+Sources are channels/groups where the bot READS messages from.
+You must be a member of these channels (your user account, not the bot).
+
+IMPORTANT: The bot uses YOUR Telethon session to access sources, so you can
+read from private channels as long as YOU are a member!
+
+--------------------------------------------------------------------------------
+COMMAND: /addsource @username_or_channel_id
+--------------------------------------------------------------------------------
+Description:
+  Add a PUBLIC channel or group as a source. The bot will look up the channel
+  by username or ID and add it to the database.
+
+When to use:
+  - Adding public channels (@username format)
+  - Adding channels by numeric ID
+  - Channel is visible/searchable on Telegram
+
+Usage examples:
+  /addsource @SomeChannelName
+  /addsource @crypto_signals
+  /addsource -1001234567890
+  /addsource https://t.me/somechannel
+
+What happens after:
+  1. Bot looks up the channel
+  2. Shows channel info (name, ID, message count)
+  3. Shows estimated time based on current safety preset
+  4. Adds to source database
+
+Example response:
+  "✅ Source Added!
+   
+   Name: Crypto Signals Pro
+   ID: -1001234567890
+   Messages: 45,230
+   Privacy: 🌐 Public
+   
+   ⏱️ Estimated Time (at current preset):
+   • Conservative: ~226h | Balanced: ~90h | Aggressive: ~45h
+   
+   Use /bulk_start -1001234567890 <dest_id> to start"
+
+Copy these examples:
+/addsource @ChannelNameHere
+/addsource -1001234567890
+
+--------------------------------------------------------------------------------
+COMMAND: /addsource_private <invite_link>
+--------------------------------------------------------------------------------
+Description:
+  Add a PRIVATE channel or group as a source using an invite link.
+  This is essential for private channels that don't have a public username.
+
+When to use:
+  - Channel is private (no @username)
+  - You have an invite link
+  - Channel cannot be found by search
+  - Someone sent you a join link
+
+Usage examples:
+  /addsource_private https://t.me/+ABCDEFghIJKlmNo
+  /addsource_private https://t.me/joinchat/AAAAAA
+  /addsource_private +ABCDEFghIJKlmNo
+
+Requirements:
+  - You (your account) MUST be a member of the private channel
+  - Valid invite link that hasn't expired
+  - Link must be accessible
+
+Example response:
+  "✅ Private Added!
+   
+   VIP Trading Group
+   ID: -1009876543210"
+
+Copy these examples:
+/addsource_private https://t.me/+ABCDEFghIJKlmNo
+/addsource_private https://t.me/joinchat/AAAAAA
+
+--------------------------------------------------------------------------------
+COMMAND: /sources  OR  /removesource [id]
+--------------------------------------------------------------------------------
+Description (Two functions in one):
+
+  WITHOUT argument (/sources):
+    List all configured sources with their details including message counts,
+    privacy status, and IDs needed for bulk_start.
+
+  WITH argument (/removesource id):
+    Remove a source by its channel ID.
+
+When to use:
+  - Check what sources are configured
+  - Get source IDs for bulk_start command
+  - Remove unwanted sources
+  - Clean up old/deleted channels
+
+Example response (listing):
+  "📥 Sources (3)
+   
+   1. 🌐 **Crypto Signals**
+      `-1001234567890` | 45,230 msgs
+   
+   2. 🔒 **VIP Group**
+      `-1009876543210` | 12,450 msgs
+   
+   3. 🌐 **News Channel**
+      `-1005555555555` | 89,120 msgs"
+
+Example response (removing):
+  "✅ Removed `-1001234567890`."
+
+Copy these commands:
+/sources
+/removesource -1001234567890
+
+--------------------------------------------------------------------------------
+COMMAND: /mysources
+--------------------------------------------------------------------------------
+Description:
+  Browse ALL channels/groups that YOUR Telegram account is a member of.
+  This helps you find channels to add as sources without remembering usernames.
+
+When to use:
+  - Forgot which channels you're in
+  - Looking for a channel but forgot its name/ID
+  - Want to see all available options
+  - Finding private channels you joined
+
+What it shows:
+  - Up to 25 most recent channels
+  - Channel names and IDs
+  - Privacy indicators (public/private)
+
+Example response:
+  "📋 Your Channels (15)
+   
+   1. 🌐 **Crypto Signals Pro**
+      `-1001234567890`
+   
+   2. 🔒 **Private VIP Group**
+      `-1009876543210`
+   
+   3. 🌐 **Tech News Daily**
+      `-1005555555555`"
+
+Copy this command:
+/mysources
+
+--------------------------------------------------------------------------------
+COMMAND: /setlink <source_id> <invite_link>
+--------------------------------------------------------------------------------
+Description:
+  Set or update the invite link for a private source. Useful if the original
+  link expired or you need to update access credentials.
+
+When to use:
+  - Private source link expired
+  - Need to update access
+  - Source was added without link initially
+  - Re-joining a private channel with new link
+
+Usage example:
+  /setlink -1009876543210 https://t.me/+NEWlink123ABC
+
+Copy this example:
+/setlink -1009876543210 https://t.me/+NEWlink123ABC
+
+================================================================================
+                3. DESTINATION MANAGEMENT (Where to forward to)
+================================================================================
+
+Destinations are channels/groups where messages get FORWARDED TO.
+The BOT must be added as admin to destination channels (to allow forwarding).
+
+--------------------------------------------------------------------------------
+COMMAND: /adddest @username_or_chat_id
+--------------------------------------------------------------------------------
+Description:
+  Add a channel or group as a destination for forwarded messages.
+  The BOT must be an admin in this chat to forward messages there.
+
+When to use:
+  - Setting up where messages should go
+  - Adding multiple destinations
+  - Preparing for bulk forwarding
+
+PREREQUISITE:
+  ⚠️ Your bot MUST be added as admin in the destination channel!
+  
+  To add bot as admin:
+  1. Go to destination channel settings
+  2. Go to Administrators
+  3. Add your bot (@YourBotUsername)
+  4. Give it permission to post messages
+
+Usage examples:
+  /adddest @MyArchiveChannel
+  /adddest @saved_messages_backup
+  /adddest -1009998887777
+
+Example response:
+  "✅ Destination Added!
+   
+   My Archive Channel
+   ID: `-1009998887777`"
+
+Copy these examples:
+/adddest @DestinationChannelName
+/adddest -1009998887777
+
+--------------------------------------------------------------------------------
+COMMAND: /dests  OR  /removedest [id]
+--------------------------------------------------------------------------------
+Description (Two functions in one):
+
+  WITHOUT argument (/dests):
+    List all configured destinations with their IDs.
+
+  WITH argument (/removedest id):
+    Remove a destination by its chat ID.
+
+When to use:
+  - Check what destinations are set up
+  - Get destination IDs for bulk_start
+  - Remove old/unwanted destinations
+
+Example response (listing):
+  "📤 Destinations (2)
+   
+   1. **My Archive**
+      `-1009998887777`
+   
+   2. **Backup Channel**
+      `-1001112223333`"
+
+Example response (removing):
+  "✅ Removed `-1009998887777`."
+
+Copy these commands:
+/dests
+/removedest -1009998887777
+
+================================================================================
+                       4. BULK OPERATIONS (Main Forwarding)
+================================================================================
+
+These are the CORE commands that actually perform the forwarding!
+This is where the magic happens. 🔮
+
+--------------------------------------------------------------------------------
+COMMAND: /bulk_start <source_id> <destination_id>
+--------------------------------------------------------------------------------
+Description:
+  START THE FORWARDING PROCESS! This initiates safe bulk forwarding from
+  source to destination with full anti-ban protection enabled.
+
+When to use:
+  - Ready to start forwarding messages
+  - Source and destination are both configured
+  - Want to begin the operation
+
+What happens:
+  1. Validates source and destination exist
+  2. Checks no other operation is running
+  3. Shows operation summary (limits, estimated time)
+  4. Starts forwarding with safety features active
+  5. Progress is saved continuously (crash-safe)
+
+Safety features active during operation:
+  ✅ Human-like delays between messages
+  ✅ Random pauses every N messages
+  ✅ Hourly/daily limit enforcement
+  ✅ Auto-pause during sleep hours (11PM-8AM)
+  ✅ Adaptive slowdown if rate limited
+  ✅ Batch commits for crash recovery
+
+Usage examples:
+  /bulk_start -1001234567890 -1009998887777
+  /bulk_start -1009876543210 -1001112223333
+
+Example response:
+  "🚀 Starting SAFE Bulk Forward...
+   
+   From: Crypto Signals Pro
+   To: My Archive Channel
+   
+   🛡️ Safety: BALANCED
+   Limits: 800/hr | 15,000/day
+   Sleep: 23:00 - 08:00
+   
+   ⏳ Initializing..."
+
+Copy these examples:
+/bulk_start -1001234567890 -1009998887777
+
+TIP: Get IDs from /sources and /dests commands first!
+
+--------------------------------------------------------------------------------
+COMMAND: /bulk_status
+--------------------------------------------------------------------------------
+Description:
+  Show detailed progress of the currently running bulk operation.
+  Includes visual progress bar, speed stats, and safety metrics.
+
+When to use:
+  - Check how far along the operation is
+  - See success/failure counts
+  - Estimate remaining time
+  - Monitor safety limits usage
+
+What it shows:
+  - Visual progress bar (████░░░░░░░░░░░ 45%)
+  - Processed vs Total messages
+  - Success / Failed / Skipped counts
+  - Speed (messages per second)
+  - ETA (estimated time remaining)
+  - Safety metrics (daily/hourly usage)
+
+Example response:
+  "📊 BULK STATUS
+   
+   Status: RUNNING
+   OpID: `abc123def456...`
+   
+   ████████░░░░░░░░░░░ 45.23%
+   
+   📈 20,450 / 45,200
+   ✅ 20,410 | ❌ 25 | ⏭️ 15
+   
+   ⏱️ 45.2min | 7.5/s | ETA: 54.8min
+   
+   🛡️ Safety:
+   Day: 8,250/15,000 (55%)
+   Speed: 1.00x
+   
+   ---
+   /bulk_pause | /bulk_resume | /bulk_stop"
+
+Copy this command:
+/bulk_status
+
+--------------------------------------------------------------------------------
+COMMAND: /bulk_pause
+--------------------------------------------------------------------------------
+Description:
+  PAUSE the current forwarding operation. All progress is saved so you can
+  resume later. The bot stops sending new messages immediately.
+
+When to use:
+  - Need to temporarily stop forwarding
+  - Something seems wrong, want to check
+  - Want to change something mid-operation
+  - Manual intervention needed
+
+What happens:
+  - Forwarding stops immediately
+  - Current position is saved to database
+  - Can resume anytime with /bulk_resume
+  - No messages lost or duplicated
+
+Example response:
+  "⏸️ PAUSED
+   
+   Progress saved. Use /bulk_resume."
+
+Copy this command:
+/bulk_pause
+
+--------------------------------------------------------------------------------
+COMMAND: /bulk_resume
+--------------------------------------------------------------------------------
+Description:
+  RESUME a paused forwarding operation. Continues exactly where it left off,
+  picking up from the last successfully processed message.
+
+When to use:
+  - Ready to continue after pause
+  - Bot was restarted/crashed during operation
+  - Starting the bot back up after maintenance
+  - Recovering from any interruption
+
+What happens:
+  - Checks database for last position
+  - Resumes from last successful message
+  - Skips already-forwarded messages
+  - Continues with safety features active
+
+Example response:
+  "▶️ RESUMED!
+   
+   Continuing from where we left off..."
+
+Copy this command:
+/bulk_resume
+
+NOTE: Also works after crashes/restarts! Just send /bulk_resume.
+
+--------------------------------------------------------------------------------
+COMMAND: /bulk_stop
+--------------------------------------------------------------------------------
+Description:
+  STOP the current forwarding operation completely. Unlike pause, this ends
+  the operation but still saves progress. You can resume later if needed.
+
+When to use:
+  - Done with this batch
+  - Want to cancel the operation
+  - Changing source/destination
+  - Stopping permanently (for now)
+
+What happens:
+  - Operation is marked as stopped
+  - Final statistics are recorded
+  - Can be resumed later with /bulk_resume
+  - Or start fresh with /bulk_start
+
+Example response:
+  "⏹️ STOPPED
+   
+   Progress saved. Resume anytime with /bulk_resume"
+
+Copy this command:
+/bulk_stop
+
+================================================================================
+                     5. MONITORING & STATUS (Track Progress)
+================================================================================
+
+Keep track of everything happening with your bot and operations.
+
+--------------------------------------------------------------------------------
+COMMAND: /status
+--------------------------------------------------------------------------------
+Description:
+  Show overall system status including connection states, configuration,
+  and summary of active operations.
+
+When to use:
+  - Quick health check
+  - Verify bot is working properly
+  - See connection status at a glance
+  - Check if operation is running
+
+What it shows:
+  - Telethon connection status (✅/❌)
+  - Authorization status
+  - Bot online status
+  - Engine state (IDLE/RUNNING/PAUSED/STOPPED)
+  - Source/Destination count
+  - Today's usage statistics
+  - Active operation summary (if any)
+
+Example response:
+  "📊 SYSTEM STATUS
+   
+   🔌 Telethon: ✅
+   🔐 Authorized: ✅
+   🤖 Bot: ✅ Online
+   ⚙️ Engine: RUNNING
+   🛡️ Safety: BALANCED
+   
+   📥 Sources: 3
+   📤 Destinations: 2
+   
+   📊 Usage Today:
+   Hour: 450/800 (56%)
+   Day: 8,250/15,000 (55%)
+   
+   🔄 Active Op:
+   `abc123def456...`
+   RUNNING | 45.2%
+   20,450 processed | ✅20,410 ❌25"
+
+Copy this command:
+/status
+
+================================================================================
+                        6. SAFETY CONTROLS (Account Protection)
+================================================================================
+
+Monitor and understand the safety features protecting your account from bans.
+
+--------------------------------------------------------------------------------
+COMMAND: /safety_status
+--------------------------------------------------------------------------------
+Description:
+  Show DETAILED safety metrics including current usage, limits, speed control,
+  active operation status, and calculated ban risk level.
+
+When to use:
+  - Deep dive into safety metrics
+  - Check if approaching limits
+  - Understand why bot slowed down
+  - Assess ban risk level
+  - Debugging safety issues
+
+What it shows:
+  - Configuration (preset, limits, sleep schedule)
+  - Real-time usage (per minute/hour/day)
+  - Percentage of limits used
+  - Speed control multiplier (slowdown factor)
+  - Sleep/break status
+  - Active operation details
+  - Ban risk assessment (LOW/MEDIUM/HIGH)
+
+Risk Levels Explained:
+  🟢 LOW     - Under 70% of limits, operating safely
+  🟡 MEDIUM - 70-90% of limits, caution advised
+  🔴 HIGH    - Over 90% of limits, high risk zone
+
+Example response:
+  "🛡️ SAFETY DASHBOARD
+   
+   ⚙️ Configuration:
+   • Preset: BALANCED
+   • Hourly Limit: 800
+   • Daily Limit: 15,000
+   • Sleep: 23:00-08:00 ✅
+   
+   📊 Current Usage:
+   • This Minute: 18
+   • This Hour: 450 / 800 (56.3%)
+   • Today: 8,250 / 15,000 (55.0%)
+   
+   🐢 Speed Control:
+   • Current Slowdown: 1.00x
+   • Is Sleeping: No
+   • In Break: Yes ☕
+   
+   ---
+   
+   🔄 Active Operation:
+   • Status: RUNNING
+   • Processed: 20,450 / 45,200
+   • ✅ 20,410 | ❌ 25 | ⏭️ 15
+   
+   ⚠️ Ban Risk Level: 🟢 MEDIUM"
+
+Copy this command:
+/safety_status
+
+================================================================================
+                      7. COMMAND FLOW (How It All Connects)
+================================================================================
+
+This section explains HOW commands work together in a typical workflow.
+
+================================================================================
+WORKFLOW #1: FIRST TIME SETUP (Complete Setup from Scratch)
+================================================================================
+
+Step 1: Start the bot
+   → Send: /start
+   → Expected: Welcome message with safety info
+
+Step 2: See all available commands
+   → Send: /help
+   → Expected: Complete command list
+
+Step 3: Find channels you want to forward FROM
+   → Send: /mysources
+   → Expected: List of all channels you're in
+
+Step 4: Add a source channel (PUBLIC)
+   → Send: /addsource @ChannelName
+   → Expected: Source added with ID and message count
+
+   OR for PRIVATE channel:
+   → Send: /addsource_private https://t.me/+inviteLink
+   → Expected: Private source added
+
+Step 5: Verify sources are added
+   → Send: /sources
+   → Expected: List of all configured sources
+
+Step 6: Add destination (where messages GO)
+   → Prerequisite: Add bot as admin to destination channel!
+   → Send: /adddest @DestinationChannel
+   → Expected: Destination added with ID
+
+Step 7: Verify destinations
+   → Send: /dests
+   → Expected: List of all destinations
+
+Step 8: Check system status
+   → Send: /status
+   → Expected: System health check
+
+================================================================================
+WORKFLOW #2: START FORWARDING (Main Operation)
+================================================================================
+
+Step 1: Get source and destination IDs
+   → Send: /sources (note the source ID)
+   → Send: /dests (note the dest ID)
+
+Step 2: Start forwarding
+   → Send: /bulk_start <source_id> <destination_id>
+   Example: /bulk_start -1001234567890 -1009998887777
+   → Expected: Operation started confirmation
+
+Step 3: Monitor progress
+   → Send: /bulk_status
+   → Expected: Progress bar with stats
+
+Step 4: Check safety metrics (optional but recommended)
+   → Send: /safety_status
+   → Expected: Detailed safety dashboard
+
+Step 5: Pause if needed (optional)
+   → Send: /bulk_pause
+   → Expected: Operation paused
+
+Step 6: Resume when ready
+   → Send: /bulk_resume
+   → Expected: Operation resumed
+
+Step 7: Stop when done (or let it complete!)
+   → Send: /bulk_stop
+   → Expected: Operation stopped
+
+================================================================================
+WORKFLOW #3: TROUBLESHOOTING
+================================================================================
+
+Problem: "Bot not responding"
+   Solution: Send /status to check connection
+
+Problem: "Source not found"
+   Solution: 
+   - For public: /addsource @CorrectUsername
+   - For private: /addsource_private https://t.me/+correct_link
+
+Problem: "Not authorized" error
+   Solution: Only ADMIN_ID (you) can use admin commands
+
+Problem: "Already running!" error
+   Solution: Send /bulk_stop first, then start new operation
+
+Problem: "Operation stuck"
+   Solution: 
+   - Send /bulk_pause to pause safely
+   - Send /status to check system health
+   - Send /bulk_resume to continue
+
+Problem: "Rate limit warnings"
+   Solution: 
+   - Send /safety_status to check risk level
+   - Consider switching to conservative preset
+   - Let auto-recovery handle it
+
+================================================================================
+WORKFLOW #4: LARGE OPERATIONS (400K+ Messages)
+================================================================================
+
+For very large operations, follow this optimized workflow:
+
+Step 1: Set conservative preset (in Railway variables)
+   SAFETY_PRESET=conservative
+
+Step 2: Add source
+   /addsource @LargeChannel
+
+Step 3: Start operation
+   /bulk_start <src_id> <dest_id>
+
+Step 4: Let it run 24/7
+   - Sleep schedule handles overnight automatically
+   - Crash-safe: resumes after restarts
+   - Auto-pause on rate limits
+
+Step 5: Monitor occasionally
+   /safety_status (check once or twice daily)
+
+Step 6: Wait for completion!
+   Conservative: 7-10 days for 400K
+   Balanced: 4-6 days for 400K
+   Aggressive: 2-3 days for 400K
+
+================================================================================
+                      8. QUICK REFERENCE (All Commands)
+================================================================================
+
+┌─────────────────────┬──────────────────────────────────────────────────────┐
+│ COMMAND             │ DESCRIPTION                                          │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ /start              │ Welcome message & bot status                         │
+│ /help               │ Complete help guide                                  │
+│ /status             │ System overview & connection status                  │
+│ /safety_status      │ Detailed safety metrics & risk level                 │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ SOURCES (Read FROM) │                                                      │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ /addsource @name    │ Add public channel/group as source                   │
+│ /addsource_private  │ Add private channel via invite link                  │
+│ /sources            │ List all sources with IDs                            │
+│ /mysources          │ Browse channels you're member of                     │
+│ /removesource id    │ Remove a source                                      │
+│ /setlink id link    │ Update private source invite link                    │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ DESTINATIONS (TO)   │                                                      │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ /adddest @name      │ Add destination channel (bot must be admin!)         │
+│ /dests              │ List all destinations with IDs                       │
+│ /removedest id      │ Remove a destination                                 │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ BULK OPERATIONS     │                                                      │
+├─────────────────────┼──────────────────────────────────────────────────────┤
+│ /bulk_start src dst │ START forwarding!                                    │
+│ /bulk_status        │ Show progress bar & stats                            │
+│ /bulk_pause         │ Pause operation (saves progress)                     │
+│ /bulk_resume        │ Resume paused/stopped operation                      │
+│ /bulk_stop          │ Stop operation completely                            │
+└─────────────────────┴──────────────────────────────────────────────────────┘
+
+================================================================================
+                              COPY-PASTE LIST
+================================================================================
+
+Just copy and paste these directly into Telegram:
+
+/start
+/help
+/status
+/safety_status
+/addsource @channel_name_here
+/addsource_private https://t.me/+invite_link_here
+/sources
+/mysources
+/removesource -1001234567890
+/setlink -1001234567890 https://t.me/+new_link_here
+/adddest @destination_channel
+/dests
+/removedest -1009998887777
+/bulk_start -1001234567890 -1009998887777
+/bulk_status
+/bulk_pause
+/bulk_resume
+/bulk_stop
+
+================================================================================
+                          END OF COMMAND REFERENCE
+================================================================================
+
+Need help? Check the logs in Railway Dashboard or review DEPLOYMENT_GUIDE.md
+
+Built with ❤️ using Telethon + python-telegram-bot
+Safety Edition - Maximum Account Protection
+
+Last Updated: July 2024
+Version: 3.0 (Safety Edition)
+
+================================================================================
