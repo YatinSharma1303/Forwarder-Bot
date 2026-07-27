@@ -1831,45 +1831,86 @@ async def cmd_add_destination(update: Update, context: CallbackContext):
         original_identifier = identifier  # Keep original for error messages
         if identifier.startswith('@'): identifier = identifier[1:]
         
+        logger.info(f"🔍 Trying to get chat: @{identifier}")
+        
         # Try to get chat info
+        chat = None
+        last_error = None
+        
+        # Method A: Try with @ prefix
         try:
-            # Try with @ first (for public channels)
+            logger.info(f"  → Attempt 1: get_chat('@{identifier}')")
+            chat = await context.bot.get_chat(f"@{identifier}")
+            logger.info(f"  ✓ Success with @ prefix!")
+        except Exception as e1:
+            last_error = str(e1)
+            logger.warning(f"  ✗ Failed with @ prefix: {e1}")
+            
+            # Method B: Try without @ (for numeric IDs)
             try:
-                chat = await context.bot.get_chat(f"@{identifier}")
-            except:
-                # Try without @ (for IDs)
+                logger.info(f"  → Attempt 2: get_chat('{identifier}')")
                 chat = await context.bot.get_chat(identifier)
-            
-            db.add_destination(chat.id, chat.title or '', chat.type.value if hasattr(chat.type, 'value') else str(chat.type))
-            await update.message.reply_text(
-                f"✅ **Destination Added!**\n\n"
-                f"**{chat.title}**\n"
-                f"ID: `{chat.id}`\n"
-                f"Type: {chat.type.value if hasattr(chat.type, 'value') else str(chat.type)}\n\n"
-                f"_Added via username/ID_ ✅",
-                parse_mode=TGParseMode.MARKDOWN
-            )
-        except Exception as e:
-            error_msg = str(e)[:300]
-            logger.error(f"adddest username/id error: {error_msg}")
-            
-            # Show the ACTUAL error + helpful suggestions
-            suggestion = (
-                f"❌ **Error:** `{error_msg}`\n\n"
-                f"💡 **Solutions:**\n\n"
-                f"**Method 1 - Forward Message (Recommended):**\n"
-                f"1. Go to channel `{original_identifier}`\n"
-                f"2. Forward any message from that channel\n"
-                f"3. Send it here with `/adddest`\n\n"
-                f"**Method 2 - Check Bot Access:**\n"
-                f"• Is `@forwarder_superbot` added as admin?\n"
-                f"• Does bot have **Post Messages** permission?\n"
-                f"• Is the channel username correct?\n\n"
-                f"**Method 3 - Try Channel ID:**\n"
-                f"Use numeric ID: `/adddest 123456789`"
-            )
-            
-            await update.message.reply_text(suggestion, parse_mode=TGParseMode.MARKDOWN)
+                logger.info(f"  ✓ Success without @!")
+            except Exception as e2:
+                last_error = str(e2)
+                logger.warning(f"  ✗ Failed without @: {e2}")
+                
+                # Method C: Try as numeric ID
+                try:
+                    numeric_id = int(identifier)
+                    logger.info(f"  → Attempt 3: get_chat({numeric_id}) as ID")
+                    chat = await context.bot.get_chat(numeric_id)
+                    logger.info(f"  ✓ Success as numeric ID!")
+                except ValueError:
+                    logger.warning(f"  ✗ '{identifier}' is not a valid numeric ID")
+                except Exception as e3:
+                    last_error = str(e3)
+                    logger.warning(f"  ✗ Failed as ID: {e3}")
+        
+        # If we got a chat, add it!
+        if chat:
+            try:
+                db.add_destination(chat.id, chat.title or '', chat.type.value if hasattr(chat.type, 'value') else str(chat.type))
+                await update.message.reply_text(
+                    f"✅ **Destination Added!**\n\n"
+                    f"**{chat.title}**\n"
+                    f"ID: `{chat.id}`\n"
+                    f"Type: {chat.type.value if hasattr(chat.type, 'value') else str(chat.type)}\n\n"
+                    f"_Added via username/ID_ ✅",
+                    parse_mode=TGParseMode.MARKDOWN
+                )
+                return
+            except Exception as db_err:
+                logger.error(f"Database error: {db_err}")
+                await update.message.reply_text(
+                    f"❌ **Database Error:** `{str(db_err)[:200]}`",
+                    parse_mode=TGParseMode.MARKDOWN
+                )
+                return
+        
+        # If we get here, all methods failed
+        logger.error(f"❌ All methods failed. Last error: {last_error}")
+        
+        # Show comprehensive error with debug info
+        suggestion = (
+            f"❌ **Could Not Find Channel:**\n\n"
+            f"`{last_error[:200] if last_error else 'Unknown error'}`\n\n"
+            f"📋 **Debug Info:**\n"
+            f"• Input: `{original_identifier}`\n"
+            f"• Processed: `{identifier}`\n"
+            f"• Bot: `@forwarder_superbot`\n\n"
+            f"💡 **Solutions:**\n\n"
+            f"**1️⃣ Forward Method (100% Works):**\n"
+            f"Forward any message from the channel here, then send `/adddest`\n\n"
+            f"**2️⃣ Verify Bot Access:**\n"
+            f"• Open channel → Settings → Administrators\n"
+            f"• Confirm `@forwarder_superbot` is listed\n"
+            f"• Confirm it has **Post Messages** permission\n\n"
+            f"**3️⃣ Use Channel ID:**\n"
+            f"Forward a message to get the ID, then:\n`/adddest <channel_id>`"
+        )
+        
+        await update.message.reply_text(suggestion, parse_mode=TGParseMode.MARKDOWN)
     
     except Exception as e:
         logger.error(f"CRITICAL adddest error: {e}", exc_info=True)
