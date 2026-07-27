@@ -1756,9 +1756,10 @@ async def cmd_add_destination(update: Update, context: CallbackContext):
             await update.message.reply_text("❌ Not authorized."); return
         
         # Method 1: Forwarded message (most reliable!)
-        if update.message.forward_from_chat:
+        forward_from_chat = getattr(update.message, 'forward_from_chat', None)
+        if forward_from_chat:
             try:
-                chat = update.message.forward_from_chat
+                chat = forward_from_chat
                 chat_id = chat.id
                 chat_title = chat.title or 'Unknown Channel'
                 chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
@@ -1780,9 +1781,11 @@ async def cmd_add_destination(update: Update, context: CallbackContext):
                 return
         
         # Method 2: Reply to a message from destination channel
-        if update.message.reply_to_message and update.message.reply_to_message.forward_from_chat:
+        reply_msg = getattr(update.message, 'reply_to_message', None)
+        reply_forward = getattr(reply_msg, 'forward_from_chat', None) if reply_msg else None
+        if reply_msg and reply_forward:
             try:
-                chat = update.message.reply_to_message.forward_from_chat
+                chat = reply_forward
                 chat_id = chat.id
                 chat_title = chat.title or 'Unknown Channel'
                 chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
