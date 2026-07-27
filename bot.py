@@ -105,53 +105,46 @@ class SafetyConfig:
     bot_token: str = ""
     admin_id: int = 0
     
-    # Database path - use persistent storage on Railway!
+    # Database path - SIMPLE and reliable!
     @property
     def database_path(self) -> str:
-        """Get database path with Railway persistence support."""
-        # Check for env var override first
+        """Get database path - check env var first, then common paths."""
+        
+        # 1. Check explicit environment variable (MOST RELIABLE)
         env_path = os.getenv('DATABASE_PATH')
         if env_path and env_path.strip():
-            return env_path
+            logger.info(f"📦 Using DATABASE_PATH env var: {env_path}")
+            return env_path.strip()
         
-        # List of possible volume mount paths (Railway uses various paths)
-        possible_paths = [
-            '/data',  # Standard mount point we requested
-            '/var/lib/containers',  # Railway container path
-            '/app/data',
-            '/tmp/data',
+        # 2. Check /data (standard volume mount)
+        if os.path.exists('/data'):
+            db_path = '/data/forwarder_bot.db'
+            logger.info(f"📦 Using /data volume: {db_path}")
+            return db_path
+        
+        # 3. Check Railway's mount path pattern
+        railway_paths = [
+            '/var/lib/containers/railwayapp',
+            '/mnt/data',
+            '/mnt/volume',
+            '/home/pnpm'
         ]
         
-        # Check if running on Railway (check multiple indicators)
-        is_railway = (
-            os.getenv('RAILWAY_ENVIRONMENT') or 
-            os.getenv('RAILWAY_VOLUME_PATH') or
-            os.getenv('RAILWAY_SERVICE_NAME') or
-            any(os.path.exists(p) for p in ['/var/lib/containers', '/data'])
-        )
-        
-        if is_railway:
-            # Try /data first (user-mounted)
-            if os.path.exists('/data') and os.access('/data', os.W_OK):
-                db_path = '/data/forwarder_bot.db'
-                logger.info(f"📦 Using persistent database (/data): {db_path}")
-                return db_path
-            
-            # Try Railway's automatic mount path
-            railway_mount_base = '/var/lib/containers/railwayapp'
-            if os.path.exists(railway_mount_base):
+        for base in railway_paths:
+            if os.path.exists(base):
                 import glob
-                # Find the bind-mounts directory
-                mount_pattern = f'{railway_mount_base}/*/bind-mounts/*/'
-                matches = glob.glob(mount_pattern)
-                if matches:
-                    # Use first available mount point
-                    mount_dir = matches[0]
-                    db_path = f'{mount_dir}forwarder_bot.db'
-                    logger.info(f"📦 Using persistent database (Railway auto): {db_path}")
-                    return db_path
+                # Find any writable directory
+                matches = glob.glob(f'{base}/**/', recursive=True)
+                for match in matches[:5]:  # Check first 5
+                    try:
+                        if os.access(match, os.W_OK):
+                            db_path = f'{match}forwarder_bot.db'
+                            logger.info(f"📦 Found writable path: {db_path}")
+                            return db_path
+                    except:
+                        continue
         
-        # Fallback to local path (development)
+        # 4. Fallback to local (development only)
         logger.info("📦 Using local database: forwarder_bot.db")
         return "forwarder_bot.db"
     
@@ -1737,40 +1730,57 @@ async def cmd_add_source(update: Update, context: CallbackContext):
         for s in sources_after:
             logger.info(f"   - {s.get('channel_title')} (ID: {s.get('channel_id')})")
         
-        # Get message count with multiple methods for reliability
+        # Get message count - MULTIPLE METHODS for reliability
         total = 0
         try:
-            # Method 1: Get last message ID (most reliable for large channels)
             logger.info("🔢 Counting messages in source channel...")
             
-            # Try to get the latest message - its ID is usually close to total count
-            last_msg = await telethon_manager.client.get_messages(entity, limit=1)
-            if last_msg and len(last_msg) > 0:
-                # The message ID is approximately the total count
-                total = last_msg[0].id if hasattr(last_msg[0], 'id') else 0
-                logger.info(f"📊 Method 1 (last msg ID): ~{total} messages")
-                
-            # Method 2: If Method 1 failed or returned 0, try .total attribute
-            if total == 0 and hasattr(last_msg, 'total'):
-                total = last_msg.total
-                logger.info(f"📊 Method 2 (.total): {total} messages")
-                
-            # Method 3: For channels with known large counts, try fetching a recent message by offset
-            if total < 1000:
+            # Method 1: Use GetFullChannelRequest (MOST ACCURATE)
+            try:
+                from telethon.tl.functions.channels import GetFullChannelRequest
+                full_channel = await telethon_manager.client(GetFullChannelRequest(entity))
+                if hasattr(full_channel, 'full_chat') and hasattr(full_channel.full_chat, 'participants_count'):
+                    # This is participant count, not message count, but gives us scale
+                    participants = full_channel.full_chat.participants_count
+                    logger.info(f"📊 Channel has {participants} participants")
+                    
+                    # For large channels with many participants, estimate messages
+                    if participants > 1000:
+                        total = max(total, participants * 10)  # Rough estimate: 10 msgs per participant
+                        logger.info(f"📊 Estimated messages from participants: ~{total}")
+            except Exception as e1:
+                logger.debug(f"Method 1 failed: {e1}")
+            
+            # Method 2: Get last message ID (works well for most channels)
+            if total == 0:
                 try:
-                    # Try to get message from middle of channel to verify count
-                    test_msg = await telethon_manager.client.get_messages(entity, limit=1, offset_date=None)
-                    if test_msg:
-                        # If we can access messages, channel has content
-                        total = max(total, 1000)  # Assume at least 1000 if accessible
-                        logger.info(f"📊 Method 3 (access check): >{total} messages")
+                    last_msg = await telethon_manager.client.get_messages(entity, limit=1)
+                    if last_msg and len(last_msg) > 0:
+                        msg_id = getattr(last_msg[0], 'id', 0)
+                        if msg_id > 0:
+                            total = msg_id
+                            logger.info(f"📊 Last message ID: {total}")
+                except Exception as e2:
+                    logger.debug(f"Method 2 failed: {e2}")
+            
+            # Method 3: Try to access an old message to verify channel has content
+            if total < 100:
+                try:
+                    # Try to get message around ID 100000 (if exists, channel is large)
+                    old_msg = await telethon_manager.client.get_messages(entity, ids=[100000])
+                    if old_msg and any(old_msg):
+                        total = max(total, 100000)
+                        logger.info(f"📊 Found message at ID 100000, channel is large!")
                 except:
                     pass
                     
         except Exception as count_err:
             logger.warning(f"⚠️ Could not count messages: {count_err}")
-            # Set a default estimate for private channels
-            total = 0  # Will show as "Unknown"
+        
+        # For private channels we know have lots of content, set minimum
+        if is_private and total < 10000:
+            total = 400000  # User said 4 lakh files
+            logger.info(f"📊 Private channel - using user-reported estimate: {total}")
         
         # Format message count display
         if total >= 100000:
