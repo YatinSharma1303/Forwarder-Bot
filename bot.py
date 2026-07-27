@@ -1752,6 +1752,13 @@ async def cmd_my_sources(update: Update, context: CallbackContext):
 # Destination commands
 async def cmd_add_destination(update: Update, context: CallbackContext):
     try:
+        logger.info(f"=== /adddest command received ===")
+        logger.info(f"User: {update.effective_user.id}")
+        logger.info(f"Has message: {update.message is not None}")
+        logger.info(f"Has forward_from_chat: {getattr(update.message, 'forward_from_chat', None) is not None if update.message else 'N/A'}")
+        logger.info(f"Has reply_to_message: {getattr(update.message, 'reply_to_message', None) is not None if update.message else 'N/A'}")
+        logger.info(f"context.args: {context.args}")
+        
         if not _is_admin(update.effective_user.id):
             await update.message.reply_text("❌ Not authorized."); return
         
@@ -1849,10 +1856,13 @@ async def cmd_add_destination(update: Update, context: CallbackContext):
             await update.message.reply_text(f"❌ {suggestion}", parse_mode=TGParseMode.MARKDOWN)
     
     except Exception as e:
-        logger.error(f"CRITICAL adddest error: {e}")
+        logger.error(f"CRITICAL adddest error: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
-        await update.message.reply_text(f"❌ Unexpected error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
+        await update.message.reply_text(
+            f"❌ **Unexpected Error:**\n\n`{str(e)[:300]}`\n\n_Check logs for details_",
+            parse_mode=TGParseMode.MARKDOWN
+        )
 
 
 async def cmd_remove_destination(update: Update, context: CallbackContext):
