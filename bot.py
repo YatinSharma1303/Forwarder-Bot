@@ -1751,95 +1751,105 @@ async def cmd_my_sources(update: Update, context: CallbackContext):
 
 # Destination commands
 async def cmd_add_destination(update: Update, context: CallbackContext):
-    if not _is_admin(update.effective_user.id):
-        await update.message.reply_text("❌ Not authorized."); return
-    
-    # Method 1: Forwarded message (most reliable!)
-    if update.message.forward_from_chat:
-        try:
-            chat = update.message.forward_from_chat
-            chat_id = chat.id
-            chat_title = chat.title or 'Unknown Channel'
-            chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
-            
-            db.add_destination(chat_id, chat_title, chat_type)
-            
-            await update.message.reply_text(
-                f"✅ **Destination Added!**\n\n"
-                f"**{chat_title}**\n"
-                f"ID: `{chat_id}`\n"
-                f"Type: {chat_type}\n\n"
-                f"_Added via forwarded message_ ✨",
-                parse_mode=TGParseMode.MARKDOWN
-            )
-            return
-        except Exception as e:
-            await update.message.reply_text(f"❌ Error processing forward: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
-            return
-    
-    # Method 2: Reply to a message from destination channel
-    if update.message.reply_to_message and update.message.reply_to_message.forward_from_chat:
-        try:
-            chat = update.message.reply_to_message.forward_from_chat
-            chat_id = chat.id
-            chat_title = chat.title or 'Unknown Channel'
-            chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
-            
-            db.add_destination(chat_id, chat_title, chat_type)
-            
-            await update.message.reply_text(
-                f"✅ **Destination Added!**\n\n"
-                f"**{chat_title}**\n"
-                f"ID: `{chat_id}`\n"
-                f"Type: {chat_type}\n\n"
-                f"_Added via replied message_ ✨",
-                parse_mode=TGParseMode.MARKDOWN
-            )
-            return
-        except Exception as e:
-            await update.message.reply_text(f"❌ Error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
-            return
-    
-    # Method 3: Username or ID (traditional method)
-    if not context.args:
-        await update.message.reply_text(
-            "❌ **Usage Options:**\n\n"
-            "**Method 1 - Forward Message (Recommended):**\n"
-            "Forward ANY message from the destination channel to me\n\n"
-            "**Method 2 - Username/ID:**\n"
-            "`/adddest @username`\n"
-            "`/adddest <chat_id>`\n\n"
-            "⚠️ Bot must be admin in destination channel!",
-            parse_mode=TGParseMode.MARKDOWN
-        )
-        return
-    
-    identifier = context.args[0].strip()
-    if identifier.startswith('@'): identifier = identifier[1:]
-    
     try:
-        chat = await context.bot.get_chat(identifier)
-        db.add_destination(chat.id, chat.title or '', chat.type.value if hasattr(chat.type, 'value') else str(chat.type))
-        await update.message.reply_text(f"✅ **Destination Added!**\n\n**{chat.title}**\nID: `{chat.id}`", parse_mode=TGParseMode.MARKDOWN)
-    except Exception as e:
-        error_msg = str(e)[:200]
+        if not _is_admin(update.effective_user.id):
+            await update.message.reply_text("❌ Not authorized."); return
         
-        # Provide helpful suggestions based on error
-        if 'not found' in error_msg.lower() or 'chat' in error_msg.lower():
-            suggestion = (
-                "💡 **Try this instead:**\n\n"
-                "1. Go to your **destination channel**\n"
-                "2. **Forward any message** from that channel\n"
-                "3. Send it to me with `/adddest`\n\n"
-                "Or make sure:\n"
-                "• Bot is **admin** in the channel\n"
-                "• Bot has **Post Messages** permission\n"
-                "• Channel is public or bot is member"
+        # Method 1: Forwarded message (most reliable!)
+        if update.message.forward_from_chat:
+            try:
+                chat = update.message.forward_from_chat
+                chat_id = chat.id
+                chat_title = chat.title or 'Unknown Channel'
+                chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
+                
+                db.add_destination(chat_id, chat_title, chat_type)
+                
+                await update.message.reply_text(
+                    f"✅ **Destination Added!**\n\n"
+                    f"**{chat_title}**\n"
+                    f"ID: `{chat_id}`\n"
+                    f"Type: {chat_type}\n\n"
+                    f"_Added via forwarded message_ ✨",
+                    parse_mode=TGParseMode.MARKDOWN
+                )
+                return
+            except Exception as e:
+                logger.error(f"adddest forward method error: {e}")
+                await update.message.reply_text(f"❌ Error processing forward: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
+                return
+        
+        # Method 2: Reply to a message from destination channel
+        if update.message.reply_to_message and update.message.reply_to_message.forward_from_chat:
+            try:
+                chat = update.message.reply_to_message.forward_from_chat
+                chat_id = chat.id
+                chat_title = chat.title or 'Unknown Channel'
+                chat_type = str(chat.type) if hasattr(chat.type, '__str__') else 'channel'
+                
+                db.add_destination(chat_id, chat_title, chat_type)
+                
+                await update.message.reply_text(
+                    f"✅ **Destination Added!**\n\n"
+                    f"**{chat_title}**\n"
+                    f"ID: `{chat_id}`\n"
+                    f"Type: {chat_type}\n\n"
+                    f"_Added via replied message_ ✨",
+                    parse_mode=TGParseMode.MARKDOWN
+                )
+                return
+            except Exception as e:
+                logger.error(f"adddest reply method error: {e}")
+                await update.message.reply_text(f"❌ Error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
+                return
+        
+        # Method 3: Username or ID (traditional method)
+        if not context.args:
+            await update.message.reply_text(
+                "❌ **Usage Options:**\n\n"
+                "**Method 1 - Forward Message (Recommended):**\n"
+                "Forward ANY message from the destination channel to me\n\n"
+                "**Method 2 - Username/ID:**\n"
+                "`/adddest @username`\n"
+                "`/adddest <chat_id>`\n\n"
+                "⚠️ Bot must be admin in destination channel!",
+                parse_mode=TGParseMode.MARKDOWN
             )
-        else:
-            suggestion = f"Error: {error_msg}\n\nBot must be admin!"
+            return
         
-        await update.message.reply_text(f"❌ {suggestion}", parse_mode=TGParseMode.MARKDOWN)
+        identifier = context.args[0].strip()
+        if identifier.startswith('@'): identifier = identifier[1:]
+        
+        try:
+            chat = await context.bot.get_chat(identifier)
+            db.add_destination(chat.id, chat.title or '', chat.type.value if hasattr(chat.type, 'value') else str(chat.type))
+            await update.message.reply_text(f"✅ **Destination Added!**\n\n**{chat.title}**\nID: `{chat.id}`", parse_mode=TGParseMode.MARKDOWN)
+        except Exception as e:
+            error_msg = str(e)[:200]
+            logger.error(f"adddest username/id error: {error_msg}")
+            
+            # Provide helpful suggestions based on error
+            if 'not found' in error_msg.lower() or 'chat' in error_msg.lower():
+                suggestion = (
+                    "💡 **Try this instead:**\n\n"
+                    "1. Go to your **destination channel**\n"
+                    "2. **Forward any message** from that channel\n"
+                    "3. Send it to me with `/adddest`\n\n"
+                    "Or make sure:\n"
+                    "• Bot is **admin** in the channel\n"
+                    "• Bot has **Post Messages** permission\n"
+                    "• Channel is public or bot is member"
+                )
+            else:
+                suggestion = f"Error: {error_msg}\n\nBot must be admin!"
+            
+            await update.message.reply_text(f"❌ {suggestion}", parse_mode=TGParseMode.MARKDOWN)
+    
+    except Exception as e:
+        logger.error(f"CRITICAL adddest error: {e}")
+        import traceback
+        traceback.print_exc()
+        await update.message.reply_text(f"❌ Unexpected error: {str(e)[:200]}", parse_mode=TGParseMode.MARKDOWN)
 
 
 async def cmd_remove_destination(update: Update, context: CallbackContext):
