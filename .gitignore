@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Environment variables (contains secrets!)
+.env
+.env.local
+.env.production
+
+# Session files (CONTAINS AUTH TOKENS - NEVER COMMIT!)
+session.session
+session.session-journal
+session.session-wal
+*.session
+*.session*
+
+# Database
+*.db
+forwarder_bot.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Base64 encoded session (if saved locally)
+session_b64.txt
+session.txt
+
+# Railway
+.railway/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
