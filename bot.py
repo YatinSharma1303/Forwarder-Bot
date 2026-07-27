@@ -2183,19 +2183,43 @@ def main():
         
         logger.info("🚀 Starting Telegram polling...")
         
-        # Initialize and start polling properly
+        # Initialize
         await app.initialize()
         await post_init(app)
         
-        # Start the updater with polling - with conflict handling
+        # CRITICAL: Forcefully delete any webhook and wait for old instances to die
+        logger.info("🗑️ Deleting webhook and cleaning up old instances...")
+        
+        # Delete webhook multiple times to be sure
+        for i in range(3):
+            try:
+                await app.bot.delete_webhook(drop_pending_updates=True)
+                logger.info(f"  ✓ Webhook deleted (attempt {i+1})")
+            except Exception as e:
+                logger.warning(f"  ⚠️ Webhook delete attempt {i+1}: {e}")
+            await asyncio.sleep(2)  # Wait between attempts
+        
+        # Wait extra time for old instances to fully terminate
+        logger.info("⏳ Waiting 15 seconds for old instances to terminate...")
+        await asyncio.sleep(15)
+        
+        # Try one more webhook delete after waiting
+        try:
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("  ✓ Final webhook cleanup complete")
+        except Exception as e:
+            logger.warning(f"  ⚠️ Final webhook cleanup: {e}")
+        
+        # Start polling with conflict handling
         max_retries = 5
-        retry_delay = 10  # seconds
+        retry_delay = 10
         
         for attempt in range(max_retries):
             try:
                 await app.updater.start_polling(
                     drop_pending_updates=True,
-                    allowed_updates=Update.ALL_TYPES
+                    allowed_updates=Update.ALL_TYPES,
+                    timeout=30  # Long poll timeout
                 )
                 await app.start()
                 logger.info("✅ Bot is running with polling and health endpoint!")
@@ -2203,18 +2227,18 @@ def main():
             except Conflict as e:
                 logger.warning(f"⚠️ Conflict detected (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    logger.info(f"⏳ Waiting {retry_delay}s for old instance to terminate...")
+                    logger.info(f"⏳ Waiting {retry_delay}s before retry...")
                     await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+                    retry_delay = min(retry_delay * 2, 60)  # Exponential backoff, max 60s
                 else:
-                    logger.error("❌ Max retries reached. Another bot instance may be running.")
-                    # Try force-start anyway (last resort)
+                    logger.error("❌ Max retries reached. Trying force mode...")
                     try:
                         await app.updater.start_polling(drop_pending_updates=True)
                         await app.start()
-                        logger.info("✅ Bot started (force mode)")
+                        logger.info("✅ Bot started in force mode")
                     except Exception as final_err:
-                        logger.error(f"❌ Failed to start: {final_err}")
+                        logger.error(f"❌ Force mode failed: {final_err}")
+                        logger.error("💡 TIP: Check Railway scaling - ensure Max Instances = 1")
                         return
         
         # Keep running
