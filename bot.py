@@ -2164,24 +2164,29 @@ def main():
     import asyncio
     
     async def run_all():
-        # Start HTTP server first
+        # Start HTTP server first (for Railway health checks)
         await start_http_server()
         
-        # Then initialize and run the bot
+        logger.info("🚀 Starting Telegram polling...")
+        
+        # Initialize and start polling properly
         await app.initialize()
         await post_init(app)
+        
+        # Start the updater with polling - THIS IS WHAT WAS MISSING!
+        await app.updater.start_polling(drop_pending_updates=True)
         await app.start()
         
-        # Keep running
-        logger.info("✅ Bot is running with health endpoint!")
+        logger.info("✅ Bot is running with polling and health endpoint!")
         
-        # Wait forever
+        # Keep running
         try:
             while True:
-                await asyncio.sleep(3600)  # Check every hour
+                await asyncio.sleep(3600)  # Keep alive
         except (KeyboardInterrupt, SystemExit):
             pass
         finally:
+            await app.updater.stop()
             await app.stop()
             await app.shutdown()
             await post_shutdown(app)
