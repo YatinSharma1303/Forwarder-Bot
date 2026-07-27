@@ -1828,32 +1828,48 @@ async def cmd_add_destination(update: Update, context: CallbackContext):
             return
         
         identifier = context.args[0].strip()
+        original_identifier = identifier  # Keep original for error messages
         if identifier.startswith('@'): identifier = identifier[1:]
         
+        # Try to get chat info
         try:
-            chat = await context.bot.get_chat(identifier)
+            # Try with @ first (for public channels)
+            try:
+                chat = await context.bot.get_chat(f"@{identifier}")
+            except:
+                # Try without @ (for IDs)
+                chat = await context.bot.get_chat(identifier)
+            
             db.add_destination(chat.id, chat.title or '', chat.type.value if hasattr(chat.type, 'value') else str(chat.type))
-            await update.message.reply_text(f"✅ **Destination Added!**\n\n**{chat.title}**\nID: `{chat.id}`", parse_mode=TGParseMode.MARKDOWN)
+            await update.message.reply_text(
+                f"✅ **Destination Added!**\n\n"
+                f"**{chat.title}**\n"
+                f"ID: `{chat.id}`\n"
+                f"Type: {chat.type.value if hasattr(chat.type, 'value') else str(chat.type)}\n\n"
+                f"_Added via username/ID_ ✅",
+                parse_mode=TGParseMode.MARKDOWN
+            )
         except Exception as e:
-            error_msg = str(e)[:200]
+            error_msg = str(e)[:300]
             logger.error(f"adddest username/id error: {error_msg}")
             
-            # Provide helpful suggestions based on error
-            if 'not found' in error_msg.lower() or 'chat' in error_msg.lower():
-                suggestion = (
-                    "💡 **Try this instead:**\n\n"
-                    "1. Go to your **destination channel**\n"
-                    "2. **Forward any message** from that channel\n"
-                    "3. Send it to me with `/adddest`\n\n"
-                    "Or make sure:\n"
-                    "• Bot is **admin** in the channel\n"
-                    "• Bot has **Post Messages** permission\n"
-                    "• Channel is public or bot is member"
-                )
-            else:
-                suggestion = f"Error: {error_msg}\n\nBot must be admin!"
+            # Show the ACTUAL error + helpful suggestions
+            suggestion = (
+                f"❌ **Error:** `{error_msg}`\n\n"
+                f"💡 **Solutions:**\n\n"
+                f"**Method 1 - Forward Message (Recommended):**\n"
+                f"1. Go to channel `{original_identifier}`\n"
+                f"2. Forward any message from that channel\n"
+                f"3. Send it here with `/adddest`\n\n"
+                f"**Method 2 - Check Bot Access:**\n"
+                f"• Is `@forwarder_superbot` added as admin?\n"
+                f"• Does bot have **Post Messages** permission?\n"
+                f"• Is the channel username correct?\n\n"
+                f"**Method 3 - Try Channel ID:**\n"
+                f"Use numeric ID: `/adddest 123456789`"
+            )
             
-            await update.message.reply_text(f"❌ {suggestion}", parse_mode=TGParseMode.MARKDOWN)
+            await update.message.reply_text(suggestion, parse_mode=TGParseMode.MARKDOWN)
     
     except Exception as e:
         logger.error(f"CRITICAL adddest error: {e}", exc_info=True)
